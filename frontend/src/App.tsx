@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Zap, X, Search } from 'lucide-react'
 import axios from 'axios'
+const API_URL = import.meta.env.VITE_API_URL;
 
 type ChampInfo = {
   id: string;
@@ -28,7 +29,7 @@ export default function App() {
 
   useEffect(() => {
     // Fetch base champions list
-    axios.get('http://localhost:3001/api/champions').then(res => {
+    axios.get(`${API_URL}/api/champions`).then(res => {
       setChampionList(res.data);
     }).catch(err => console.error("Failed to fetch champions", err));
   }, []);
@@ -71,7 +72,7 @@ export default function App() {
     try {
       const allyIds = allies.filter(a => a !== null).map(a => a!.id);
       const enemyIds = enemies.filter(e => e !== null).map(e => e!.id);
-      const res = await axios.post('http://localhost:3001/api/recommend', {
+      const res = await axios.post(`${API_URL}/api/recommend`, {
         role, pickPosition, side, allies: allyIds, enemies: enemyIds
       });
       setRecommendation(res.data);
