@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, X, Search, Shield, Crosshair } from 'lucide-react'
+import { Zap, X, Search } from 'lucide-react'
 import axios from 'axios'
 
 type ChampInfo = {
@@ -186,14 +186,14 @@ export default function App() {
                 <div className="tags">
                   {recommendation.best.tags.map((t: string) => <span key={t} className="tag">{t}</span>)}
                 </div>
-                <p className="score" style={{marginBottom: 10, fontSize: '1.4rem'}}>Total Score: {recommendation.best.score} pts</p>
+                <p className="score" style={{ marginBottom: 10, fontSize: '1.4rem' }}>Total Score: {recommendation.best.score} pts</p>
                 {recommendation.best.scores && (
-                  <div style={{fontSize: '0.85rem', color: '#a3a3a3', lineHeight: '1.6'}}>
-                    Role (+{recommendation.best.scores.roleScore}) • 
-                    Draft (+{recommendation.best.scores.draftScore}) • 
-                    Comp (+{recommendation.best.scores.teamCompScore})<br/>
-                    Synergy (+{recommendation.best.scores.synergyScore}) • 
-                    Counters (+{recommendation.best.scores.counterScore}) • 
+                  <div style={{ fontSize: '0.85rem', color: '#a3a3a3', lineHeight: '1.6' }}>
+                    Role (+{recommendation.best.scores.roleScore}) •
+                    Draft (+{recommendation.best.scores.draftScore}) •
+                    Comp (+{recommendation.best.scores.teamCompScore})<br />
+                    Synergy (+{recommendation.best.scores.synergyScore}) •
+                    Counters (+{recommendation.best.scores.counterScore}) •
                     Meta (+{recommendation.best.scores.metaScore})
                   </div>
                 )}
