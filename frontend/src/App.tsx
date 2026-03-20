@@ -70,10 +70,30 @@ export default function App() {
   const getRecommendation = async () => {
     setLoading(true);
     try {
-      const allyIds = allies.filter(a => a !== null).map(a => a!.id);
-      const enemyIds = enemies.filter(e => e !== null).map(e => e!.id);
+      const allRoles = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'];
+      const remainingAllyRoles = allRoles.filter(r => r !== role);
+      const enemyRolesPattern = [...allRoles];
+
+      const allyIds: string[] = [];
+      const allyRoles: Record<string, string> = {};
+      allies.forEach((a, index) => {
+        if (a) {
+          allyIds.push(a.id);
+          allyRoles[a.id] = remainingAllyRoles[index];
+        }
+      });
+
+      const enemyIds: string[] = [];
+      const enemyRoles: Record<string, string> = {};
+      enemies.forEach((e, index) => {
+        if (e) {
+          enemyIds.push(e.id);
+          enemyRoles[e.id] = enemyRolesPattern[index];
+        }
+      });
+
       const res = await axios.post(`${API_URL}/api/recommend`, {
-        role, pickPosition, side, allies: allyIds, enemies: enemyIds
+        role, pickPosition, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles
       });
       setRecommendation(res.data);
     } catch (e) {
@@ -136,35 +156,47 @@ export default function App() {
         <div className="draft-board">
           <div className="allies-col glass-panel">
             <h3>Allies</h3>
-            <div className="champ-slots">
-              {allies.map((ally, i) => (
-                <div key={i} className={`slot ${ally ? 'filled' : 'outline'}`} onClick={() => openSelectionModal('ally', i)}>
-                  {ally ? (
-                    <>
-                      <img src={ally.image} alt={ally.name} />
-                      <span className="champ-name">{ally.name}</span>
-                      <X size={16} className="absolute top-1 right-1 cursor-pointer bg-black rounded-full p-0.5" onClick={(e) => clearSlot('ally', i, e)} />
-                    </>
-                  ) : 'Select Ally'}
-                </div>
-              ))}
+            <div className="champ-slots" style={{ alignItems: 'flex-start' }}>
+              {allies.map((ally, i) => {
+                const curRole = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'].filter(r => r !== role)[i];
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#999', fontWeight: 600, textTransform: 'uppercase' }}>{curRole}</div>
+                    <div className={`slot ${ally ? 'filled' : 'outline'}`} onClick={() => openSelectionModal('ally', i)}>
+                      {ally ? (
+                        <>
+                          <img src={ally.image} alt={ally.name} />
+                          <span className="champ-name">{ally.name}</span>
+                          <X size={16} className="absolute top-1 right-1 cursor-pointer bg-black rounded-full p-0.5" onClick={(e) => clearSlot('ally', i, e)} />
+                        </>
+                      ) : 'Select Ally'}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
           <div className="enemies-col glass-panel red-tint">
             <h3>Enemies</h3>
-            <div className="champ-slots">
-              {enemies.map((enemy, i) => (
-                <div key={i} className={`slot ${enemy ? 'filled' : 'outline'}`} onClick={() => openSelectionModal('enemy', i)}>
-                  {enemy ? (
-                    <>
-                      <img src={enemy.image} alt={enemy.name} />
-                      <span className="champ-name">{enemy.name}</span>
-                      <X size={16} className="absolute top-1 right-1 cursor-pointer bg-black rounded-full p-0.5" onClick={(e) => clearSlot('enemy', i, e)} />
-                    </>
-                  ) : 'Select Enemy'}
-                </div>
-              ))}
+            <div className="champ-slots" style={{ alignItems: 'flex-start' }}>
+              {enemies.map((enemy, i) => {
+                const curRole = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'][i];
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#ff4d4d', fontWeight: 600, textTransform: 'uppercase' }}>{curRole}</div>
+                    <div className={`slot ${enemy ? 'filled' : 'outline'}`} onClick={() => openSelectionModal('enemy', i)}>
+                      {enemy ? (
+                        <>
+                          <img src={enemy.image} alt={enemy.name} />
+                          <span className="champ-name">{enemy.name}</span>
+                          <X size={16} className="absolute top-1 right-1 cursor-pointer bg-black rounded-full p-0.5" onClick={(e) => clearSlot('enemy', i, e)} />
+                        </>
+                      ) : 'Select Enemy'}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>

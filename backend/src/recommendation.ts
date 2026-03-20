@@ -21,6 +21,11 @@ const weightsByRole: Record<string, Record<string, number>> = {
 
 const defaultWeights = { draft: 1.0, comp: 1.0, synergy: 1.0, counter: 1.0, meta: 1.0 };
 
+function normalize(val: number, min: number, max: number) {
+  const scaled = ((val - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, scaled));
+}
+
 export function getRecommendation(state: DraftState) {
   const picked = new Set([...state.allies, ...state.enemies]);
 
@@ -36,7 +41,7 @@ export function getRecommendation(state: DraftState) {
   });
 
   // 2. Analyze Current Team Composition Needs
-  const needs = analyzeTeamNeeds(state.allies, champions);
+  const needs = analyzeTeamNeeds(state.allies, champions, state.allyRoles || {});
 
   const weights = weightsByRole[state.role] || defaultWeights;
 
@@ -46,15 +51,21 @@ export function getRecommendation(state: DraftState) {
 
     const draftScore = scoreDraftOrder(profile, state);
     const teamCompScore = scoreTeamComp(profile, needs);
-    const synergyScore = scoreSynergy(profile, state.allies, champions);
-    const counterScore = scoreCounters(profile, state.enemies, champions);
+    const synergyScore = scoreSynergy(profile, state.allies, champions, state.allyRoles || {});
+    const counterScore = scoreCounters(profile, state.enemies, champions, state.enemyRoles || {});
     const metaScore = scoreMeta(profile);
 
-    const weightedDraftScore = Math.round(draftScore * weights.draft);
-    const weightedTeamCompScore = Math.round(teamCompScore * weights.comp);
-    const weightedSynergyScore = Math.round(synergyScore * weights.synergy);
-    const weightedCounterScore = Math.round(counterScore * weights.counter);
-    const weightedMetaScore = Math.round(metaScore * weights.meta);
+    const normDraft = normalize(draftScore, -20, 35);
+    const normComp = normalize(teamCompScore, -40, 70);
+    const normSynergy = normalize(synergyScore, 0, 30);
+    const normCounter = normalize(counterScore, -30, 30);
+    const normMeta = normalize(metaScore, -15, 15);
+
+    const weightedDraftScore = Math.round(normDraft * weights.draft);
+    const weightedTeamCompScore = Math.round(normComp * weights.comp);
+    const weightedSynergyScore = Math.round(normSynergy * weights.synergy);
+    const weightedCounterScore = Math.round(normCounter * weights.counter);
+    const weightedMetaScore = Math.round(normMeta * weights.meta);
 
     const total =
       weightedDraftScore +

@@ -163,6 +163,7 @@ Available endpoints:
 - Performance optimizations and caching
 - Better handling of cold starts (loading states, pre-warm strategies)
 - Real-time personal user data integration (win rates, pick rates)
+- Scan for current draft, auto-detection (bans, picks, etc.)
 
 ---
 
