@@ -190,7 +190,6 @@ export default function App() {
                 <p className="score" style={{ marginBottom: 10, fontSize: '1.4rem' }}>Total Score: {recommendation.best.score} pts</p>
                 {recommendation.best.scores && (
                   <div style={{ fontSize: '0.85rem', color: '#a3a3a3', lineHeight: '1.6' }}>
-                    Role (+{recommendation.best.scores.roleScore}) •
                     Draft (+{recommendation.best.scores.draftScore}) •
                     Comp (+{recommendation.best.scores.teamCompScore})<br />
                     Synergy (+{recommendation.best.scores.synergyScore}) •

@@ -11,13 +11,22 @@ import {
   scoreMeta
 } from './scoring.js';
 
+const weightsByRole: Record<string, Record<string, number>> = {
+  Top: { draft: 1.4, comp: 0.9, synergy: 0.8, counter: 1.5, meta: 0.8 },
+  Jungle: { draft: 1.0, comp: 1.2, synergy: 1.2, counter: 1.0, meta: 1.0 },
+  Mid: { draft: 1.1, comp: 1.1, synergy: 1.0, counter: 1.1, meta: 1.0 },
+  ADC: { draft: 0.9, comp: 1.2, synergy: 1.3, counter: 0.9, meta: 1.1 },
+  Support: { draft: 1.0, comp: 1.2, synergy: 1.5, counter: 1.0, meta: 0.9 }
+};
+
+const defaultWeights = { draft: 1.0, comp: 1.0, synergy: 1.0, counter: 1.0, meta: 1.0 };
+
 export function getRecommendation(state: DraftState) {
   const picked = new Set([...state.allies, ...state.enemies]);
 
   // 1. Filter: Ensure champion is viable for the requested role
-  // We use the strict whitelist defined in rolePool.ts
   const viablePool = rolePool[state.role] || [];
-  
+
   const viableChamps = Object.values(champions).filter((c: any) => {
     // If it's not explicitly confirmed as viable for this role, drop it.
     if (!viablePool.includes(c.id)) return false;
@@ -29,24 +38,30 @@ export function getRecommendation(state: DraftState) {
   // 2. Analyze Current Team Composition Needs
   const needs = analyzeTeamNeeds(state.allies, champions);
 
+  const weights = weightsByRole[state.role] || defaultWeights;
+
   // 3. Score all valid champions
   const scored = viableChamps.map((c: any) => {
     const profile = getProfile(c, state.role);
 
-    const roleScore = 100; // Base score, since it survived the whitelist filter
     const draftScore = scoreDraftOrder(profile, state);
     const teamCompScore = scoreTeamComp(profile, needs);
     const synergyScore = scoreSynergy(profile, state.allies, champions);
     const counterScore = scoreCounters(profile, state.enemies, champions);
     const metaScore = scoreMeta(profile);
 
-    const total = 
-      roleScore + 
-      draftScore + 
-      teamCompScore + 
-      synergyScore + 
-      counterScore + 
-      metaScore;
+    const weightedDraftScore = Math.round(draftScore * weights.draft);
+    const weightedTeamCompScore = Math.round(teamCompScore * weights.comp);
+    const weightedSynergyScore = Math.round(synergyScore * weights.synergy);
+    const weightedCounterScore = Math.round(counterScore * weights.counter);
+    const weightedMetaScore = Math.round(metaScore * weights.meta);
+
+    const total =
+      weightedDraftScore +
+      weightedTeamCompScore +
+      weightedSynergyScore +
+      weightedCounterScore +
+      weightedMetaScore;
 
     return {
       id: c.id,
@@ -54,12 +69,11 @@ export function getRecommendation(state: DraftState) {
       tags: c.tags,
       image: `https://ddragon.leagueoflegends.com/cdn/${latestPatch}/img/champion/${c.image.full}`,
       scores: {
-        roleScore,
-        draftScore,
-        teamCompScore,
-        synergyScore,
-        counterScore,
-        metaScore
+        draftScore: weightedDraftScore,
+        teamCompScore: weightedTeamCompScore,
+        synergyScore: weightedSynergyScore,
+        counterScore: weightedCounterScore,
+        metaScore: weightedMetaScore
       },
       score: total
     };
