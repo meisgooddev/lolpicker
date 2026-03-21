@@ -128,7 +128,6 @@ export function buildAutoProfile(champion: any, role: string): ChampionProfile {
 
   if (tags.includes('Tank') || tags.includes('Support')) {
     profile.provides.push('CC');
-    profile.counters.push('Assassin', 'Dive');
   }
 
   if (tags.includes('Mage')) {
