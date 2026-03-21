@@ -194,6 +194,12 @@ export default function App() {
             <div className="panel-header"><Radar size={16}/> MISSION PARAMETERS</div>
 
 
+            <div className="control-group">
+              <label>Draft Phase / Pick #</label>
+              <div className="position-display" style={{ marginTop: '0.5rem' }}>
+                {String(Math.min(10, allies.filter(a => a).length + enemies.filter(e => e).length + 1)).padStart(2, '0')}
+              </div>
+            </div>
 
             <div className="control-group">
               <label>Map Side</label>
