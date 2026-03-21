@@ -16,7 +16,6 @@ const ALL_ROLES = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'] as const;
 type RoleType = typeof ALL_ROLES[number];
 
 export default function App() {
-  const [pickPosition, setPickPosition] = useState(1);
   const [side, setSide] = useState<'blue' | 'red'>('blue');
   const [role, setRole] = useState<RoleType>('Mid');
   const [allies, setAllies] = useState<(ChampInfo | null)[]>([null, null, null, null]);
@@ -94,7 +93,7 @@ export default function App() {
       });
 
       const res = await axios.post(`${API_URL}/api/recommend`, {
-        role, pickPosition, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles
+        role, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles
       });
       // Simulate slight delay for "compiling" feel
       setTimeout(() => {
@@ -194,11 +193,7 @@ export default function App() {
           <div className="panel context-controls">
             <div className="panel-header"><Radar size={16}/> MISSION PARAMETERS</div>
 
-            <div className="control-group">
-              <label>Draft Phase / Pick #</label>
-              <input type="range" min="1" max="10" value={pickPosition} onChange={(e) => setPickPosition(parseInt(e.target.value))} />
-              <div className="position-display">0{pickPosition}</div>
-            </div>
+
 
             <div className="control-group">
               <label>Map Side</label>

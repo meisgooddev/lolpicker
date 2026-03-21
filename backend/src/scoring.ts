@@ -2,7 +2,6 @@ import { ChampionProfile, getProfile } from './profiles.js';
 
 export type DraftState = {
   role: string;
-  pickPosition: number;
   side: 'blue' | 'red';
   allies: string[];
   enemies: string[];
@@ -34,13 +33,14 @@ export type TeamNeeds = {
 export function scoreDraftOrder(profile: ChampionProfile, state: DraftState): number {
   let score = 0;
   const isRedSide = state.side === 'red';
+  const pickPosition = state.allies.length + state.enemies.length + 1;
 
-  if (state.pickPosition <= 3) {
+  if (pickPosition <= 3) {
     // Early pick (1-3)
     if (profile.safeBlind) score += 20;
     if (profile.flex) score += 10;
     if (profile.weaknesses?.includes('Easily countered') || profile.counterReliant) score -= 20;
-  } else if (state.pickPosition <= 7) {
+  } else if (pickPosition <= 7) {
     // Mid pick (4-7)
     if (profile.safeBlind) score += 5;
   } else {
@@ -49,7 +49,7 @@ export function scoreDraftOrder(profile: ChampionProfile, state: DraftState): nu
     if (profile.safeBlind) score += 5;
 
     // Red side counter-pick advantage
-    if (isRedSide && state.pickPosition === 10) {
+    if (isRedSide && pickPosition === 10) {
       if (profile.counterReliant) score += 15;
     }
   }
