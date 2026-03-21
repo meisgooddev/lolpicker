@@ -30,7 +30,21 @@ export type TeamNeeds = {
   needsEarlyGame: number;
 };
 
-export function scoreDraftOrder(profile: ChampionProfile, state: DraftState): number {
+function hasCounterMatch(profile: ChampionProfile, enemies: string[], champions: any, enemyRoles: Record<string, string>): boolean {
+  for (const enemyId of enemies) {
+    const c = champions[enemyId];
+    if (!c) continue;
+    const enemy = getProfile(c, enemyRoles[enemyId] || 'Unknown');
+    for (const counter of profile.counters || []) {
+      if (enemy.traits?.includes(counter) || enemy.style?.includes(counter) || enemy.damageType === counter) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function scoreDraftOrder(profile: ChampionProfile, state: DraftState, champions: any): number {
   let score = 0;
   const isRedSide = state.side === 'red';
   const pickPosition = state.allies.length + state.enemies.length + 1;
@@ -45,12 +59,14 @@ export function scoreDraftOrder(profile: ChampionProfile, state: DraftState): nu
     if (profile.safeBlind) score += 5;
   } else {
     // Late pick (8-10)
-    if (profile.counterReliant) score += 15;
+    const countersEnemy = hasCounterMatch(profile, state.enemies, champions, state.enemyRoles);
+    
+    if (profile.counterReliant && countersEnemy) score += 15;
     if (profile.safeBlind) score += 5;
 
     // Red side counter-pick advantage
     if (isRedSide && pickPosition === 10) {
-      if (profile.counterReliant) score += 15;
+      if (profile.counterReliant && countersEnemy) score += 15;
     }
   }
 

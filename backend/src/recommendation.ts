@@ -49,7 +49,7 @@ export function getRecommendation(state: DraftState) {
   const scored = viableChamps.map((c: any) => {
     const profile = getProfile(c, state.role);
 
-    const draftScore = scoreDraftOrder(profile, state);
+    const draftScore = scoreDraftOrder(profile, state, champions);
     const teamCompScore = scoreTeamComp(profile, needs);
     const synergyScore = scoreSynergy(profile, state.allies, champions, state.allyRoles || {});
     const counterScore = scoreCounters(profile, state.enemies, champions, state.enemyRoles || {});
