@@ -158,12 +158,12 @@ Available endpoints:
 ## ✨ Feature Improvements (Planned)
 
 - Advanced draft archetype detection
-- Improved synergy/counter intelligence
 - User accounts and saved champion pools
 - Performance optimizations and caching
 - Better handling of cold starts (loading states, pre-warm strategies)
-- Real-time personal user data integration (win rates, pick rates)
+- Real-time personal user data integration (win rates, pick rates)  
 - Scan for current draft, auto-detection (bans, picks, etc.)
+- Add explanations for each recommendation
 
 ---
 
