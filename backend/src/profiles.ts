@@ -9,9 +9,6 @@ export interface ChampionProfile {
   safeBlind: boolean;
   flex: boolean;
   counterReliant: boolean;
-  wantsFrontline: boolean;
-  wantsPeel: boolean;
-  wantsEngage: boolean;
   provides: string[];
   wants: string[];
   counters: string[];
@@ -22,6 +19,7 @@ export interface ChampionProfile {
   traits: string[];
 }
 
+// Static snapshot, roughly models patch 16.6 metadata defaults
 const metaTierMap: Record<string, number> = {
   Jinx: 9, Ahri: 8, LeeSin: 9, Aatrox: 8, Kaisa: 10, Nautilus: 9, Thresh: 8, Viego: 8,
   Sylas: 8, Yone: 9, Yasuo: 7, Jhin: 8, Ezreal: 9, Ashe: 8,
@@ -31,14 +29,14 @@ const metaTierMap: Record<string, number> = {
 };
 
 export const champArchetypes: Record<string, Partial<ChampionProfile>> = {
-  Jinx: { damageType: 'AD', scaling: 3, wantsFrontline: true, wantsPeel: true, style: ['Scaling'], traits: ['Hypercarry'], wants: ['Peel', 'Frontline'] },
-  Samira: { damageType: 'AD', wantsEngage: true, style: ['Early'], traits: ['Dive'], wants: ['Engage', 'CC'] },
+  Jinx: { damageType: 'AD', scaling: 3, style: ['Scaling'], traits: ['Hypercarry'], wants: ['Peel', 'Frontline'] },
+  Samira: { damageType: 'AD', style: ['Early'], traits: ['Dive'], wants: ['Engage', 'CC'] },
   Malphite: { damageType: 'AP', frontline: 3, engage: 3, style: ['Frontline', 'Engage'], traits: ['AntiAD'], provides: ['Engage', 'Frontline', 'CC'], counters: ['AD'], counterReliant: true },
   Poppy: { damageType: 'AD', frontline: 2, style: ['Frontline', 'Peel'], traits: ['AntiDash'], provides: ['Peel', 'Frontline', 'CC'], counters: ['Dive'], counterReliant: true },
   Lulu: { damageType: 'AP', peel: 3, style: ['Peel'], traits: ['Enchanter'], provides: ['Peel'], wants: ['Hypercarry'] },
   Orianna: { damageType: 'AP', safeBlind: true, style: ['Scaling'], provides: ['CC'], wants: ['Engage'] },
   JarvanIV: { damageType: 'AD', engage: 3, frontline: 2, style: ['Engage', 'Early'], provides: ['Engage', 'Frontline', 'CC'] },
-  Yasuo: { damageType: 'AD', wantsEngage: true, style: ['Scaling', 'Skirmish'], wants: ['CC', 'Engage'] },
+  Yasuo: { damageType: 'AD', style: ['Scaling', 'Skirmish'], wants: ['CC', 'Engage'] },
   Xerath: { safeBlind: false, style: ['Scaling'], traits: ['Immobile'], wants: ['Peel', 'Frontline'] },
   Veigar: { safeBlind: false, style: ['Scaling'], traits: ['Immobile'], wants: ['Peel', 'Frontline'] },
   Kassadin: { safeBlind: false, style: ['Scaling'], counterReliant: true },
@@ -69,7 +67,7 @@ export function buildAutoProfile(champion: any, role: string): ChampionProfile {
   let damageType: 'AP' | 'AD' | 'Mixed' = 'Mixed';
   if (tags.includes('Mage')) {
     damageType = 'AP';
-  } else if (['Diana', 'Gragas', 'Galio', 'Amumu', 'Maokai', 'Singed', 'Mordekaiser', 'Gwen', 'Sylas', 'Akali', 'Katarina', 'Evelynn', 'Elise', 'Nidalee', 'Zac', 'Sejuani', 'Nunu', 'Fiddlesticks', 'Karthus'].includes(champion.id)) {
+  } else if (['Diana', 'Gragas', 'Galio', 'Amumu', 'Maokai', 'Singed', 'Mordekaiser', 'Gwen', 'Sylas', 'Akali', 'Katarina', 'Evelynn', 'Elise', 'Nidalee', 'Zac', 'Sejuani', 'Nunu', 'Fiddlesticks', 'Karthus', 'Fizz', 'Lillia', 'Ekko', 'Kennen', 'Rumble', 'Teemo'].includes(champion.id)) {
     damageType = 'AP';
   } else if (tags.includes('Marksman') || tags.includes('Assassin') || tags.includes('Fighter')) {
     damageType = 'AD';
@@ -86,9 +84,6 @@ export function buildAutoProfile(champion: any, role: string): ChampionProfile {
     safeBlind: tags.includes('Tank') || ['Orianna', 'Ahri', 'Karma'].includes(champion.id),
     flex: false,
     counterReliant: tags.includes('Assassin'),
-    wantsFrontline: tags.includes('Marksman') || tags.includes('Mage'),
-    wantsPeel: tags.includes('Marksman'),
-    wantsEngage: tags.includes('Assassin') || tags.includes('Fighter'),
     provides: [],
     wants: [],
     counters: [],
@@ -99,10 +94,10 @@ export function buildAutoProfile(champion: any, role: string): ChampionProfile {
     traits: []
   };
 
-  // Convert boolean wants to actual array properties for the synergy engine
-  if (profile.wantsFrontline) profile.wants.push('Frontline');
-  if (profile.wantsPeel) profile.wants.push('Peel');
-  if (profile.wantsEngage) profile.wants.push('Engage');
+  // Populate implicit synergetic wants directly based on tags
+  if (tags.includes('Marksman') || tags.includes('Mage')) profile.wants.push('Frontline');
+  if (tags.includes('Marksman')) profile.wants.push('Peel');
+  if (tags.includes('Assassin') || tags.includes('Fighter')) profile.wants.push('Engage');
 
   if (tags.includes('Tank')) {
     profile.style.push('Frontline', 'Engage');
@@ -118,7 +113,6 @@ export function buildAutoProfile(champion: any, role: string): ChampionProfile {
   }
   if (tags.includes('Marksman')) {
     profile.style.push('Scaling');
-    profile.wants.push('Peel', 'Frontline');
   }
   if (tags.includes('Support')) {
     profile.style.push('Peel');
@@ -167,32 +161,4 @@ export function getProfile(champion: any, role: string): ChampionProfile {
   };
 }
 
-const primaryRoleMap: Record<string, string> = {
-  Jinx: 'ADC',
-  Lulu: 'Support',
-  Nautilus: 'Support',
-  Leona: 'Support',
-  Rell: 'Support',
-  Maokai: 'Jungle',
-  Gragas: 'Top',
-  Diana: 'Jungle',
-  Taliyah: 'Mid',
-  Poppy: 'Top',
-  Seraphine: 'Support',
-  Swain: 'Support'
-};
 
-export function getContextProfile(champion: any): ChampionProfile {
-  let inferredRole = primaryRoleMap[champion.id];
-
-  if (!inferredRole) {
-    if (champion.tags?.includes('Marksman')) inferredRole = 'ADC';
-    else if (champion.tags?.includes('Support')) inferredRole = 'Support';
-    else if (champion.tags?.includes('Mage')) inferredRole = 'Mid';
-    else if (champion.tags?.includes('Fighter')) inferredRole = 'Top';
-    else if (champion.tags?.includes('Tank')) inferredRole = 'Jungle';
-    else inferredRole = 'Unknown';
-  }
-
-  return getProfile(champion, inferredRole);
-}

@@ -104,12 +104,7 @@ export function scoreTeamComp(profile: ChampionProfile, needs: TeamNeeds): numbe
   if (profile.style.includes('Scaling')) score += needs.needsScaling * 10;
   if (profile.style.includes('Early')) score += needs.needsEarlyGame * 10;
 
-  // Additional explicitly enforced overarching penalties (so multiple ADs still punishes heavily on top of math)
-  if (profile.damageType === 'AD' && needs.stats.ad >= 3) score -= 20;
-  if (profile.damageType === 'AP' && needs.stats.ap >= 3) score -= 20;
-  if (profile.style.includes('Scaling') && needs.stats.scaling >= 2) score -= 15;
-  if (profile.style.includes('Frontline') && needs.stats.frontline >= 2) score -= 5;
-  if (profile.style.includes('Engage') && needs.stats.engage >= 2) score -= 5;
+  // Removed explicit overriding penalties to avoid distortion, mathematical continuous deficit properly handles anti-synergy
 
   // Soft cap normalization
   if (score > 0) {
@@ -180,5 +175,5 @@ export function scoreCounters(profile: ChampionProfile, enemies: string[], champ
 }
 
 export function scoreMeta(profile: ChampionProfile): number {
-  return (profile.metaScore - 5) * 3;
+  return profile.metaScore - 5;
 }
