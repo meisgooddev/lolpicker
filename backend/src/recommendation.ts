@@ -59,7 +59,7 @@ export function getRecommendation(state: DraftState) {
     const normComp = normalize(teamCompScore, -40, 70);
     const normSynergy = normalize(synergyScore, 0, 30);
     const normCounter = normalize(counterScore, -30, 30);
-    const normMeta = normalize(metaScore, -5, 5);
+    const normMeta = normalize(metaScore, -25, 25);
 
     const weightedDraftScore = Math.round(normDraft * weights.draft);
     const weightedTeamCompScore = Math.round(normComp * weights.comp);
