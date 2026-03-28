@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Search, Shield, Crosshair, Radar, Terminal, Activity, Cpu } from 'lucide-react'
+import { X, Search, Shield, Crosshair, Radar, Terminal, Activity, Cpu, User, TrendingUp } from 'lucide-react'
 import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -10,10 +10,26 @@ type ChampInfo = {
   tags: string[];
   image: string;
   score?: number;
+  scores?: Record<string, number>;
+  reasons?: string[];
+  estimatedWR?: number;
+  draftAdvantage?: 'unfavourable' | 'neutral' | 'favourable';
 };
 
 const ALL_ROLES = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'] as const;
 type RoleType = typeof ALL_ROLES[number];
+
+const SCORE_DIMENSIONS: { key: string; label: string; icon?: string }[] = [
+  { key: 'draftScore', label: 'Draft' },
+  { key: 'teamCompScore', label: 'Comp' },
+  { key: 'synergyScore', label: 'Synergy' },
+  { key: 'counterScore', label: 'Counter' },
+  { key: 'metaScore', label: 'Meta' },
+  { key: 'temporalScore', label: 'Timing' },
+  { key: 'executionScore', label: 'Execution' },
+  { key: 'playerAffinityScore', label: 'Mastery' },
+  { key: 'opggMetaScore', label: 'OP.GG Tier' },
+];
 
 export default function App() {
   const [side, setSide] = useState<'blue' | 'red'>('blue');
@@ -23,13 +39,20 @@ export default function App() {
   const [recommendation, setRecommendation] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  // Summoner identity for player affinity
+  const [gameName, setGameName] = useState('');
+  const [tagLine, setTagLine] = useState('');
+  const [region, setRegion] = useState('euw');
+
+  // Hover state for alternative inspection
+  const [hoveredChamp, setHoveredChamp] = useState<any>(null);
+
   const [championList, setChampionList] = useState<ChampInfo[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTarget, setModalTarget] = useState<{ type: 'ally' | 'enemy', index: number } | null>(null);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    // Fetch base champions list
     axios.get(`${API_URL}/api/champions`).then(res => {
       setChampionList(res.data);
     }).catch(err => console.error("Failed to fetch champions", err));
@@ -68,12 +91,13 @@ export default function App() {
     }
   };
 
-  const getRecommendation = async () => {
+  const fetchRecommendation = async () => {
     setLoading(true);
-    setRecommendation(null); // trigger recalculating visual state
+    setRecommendation(null);
+    setHoveredChamp(null);
     try {
       const remainingAllyRoles = ALL_ROLES.filter(r => r !== role);
-      
+
       const allyIds: string[] = [];
       const allyRoles: Record<string, string> = {};
       allies.forEach((a, index) => {
@@ -92,15 +116,22 @@ export default function App() {
         }
       });
 
-      const res = await axios.post(`${API_URL}/api/recommend`, {
+      const payload: any = {
         role, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles
-      });
-      // Simulate slight delay for "compiling" feel
+      };
+      // Only send summoner data if filled in
+      if (gameName.trim() && tagLine.trim()) {
+        payload.gameName = gameName.trim();
+        payload.tagLine = tagLine.trim();
+        payload.region = region;
+      }
+
+      const res = await axios.post(`${API_URL}/api/recommend`, payload);
       setTimeout(() => {
         setRecommendation(res.data);
         setLoading(false);
       }, 600);
-      
+
     } catch (e) {
       console.error(e);
       alert("Error generating recommendation.");
@@ -108,15 +139,28 @@ export default function App() {
     }
   };
 
-  const filteredChamps = Array.isArray(championList) 
+  const filteredChamps = Array.isArray(championList)
     ? championList.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
     : [];
 
-  // Helpers for Progress Bars
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'var(--score-good)';
     if (score <= 40) return 'var(--score-bad)';
     return 'var(--accent-cyan)';
+  };
+
+  // The active champion shown in the dossier — either hovered alt or the best pick
+  const activeChamp = hoveredChamp ?? recommendation?.best;
+
+  const getAdvantageColor = (adv: string) => {
+    if (adv === 'favourable') return 'var(--score-good)';
+    if (adv === 'unfavourable') return 'var(--score-bad)';
+    return 'var(--accent-amber)';
+  };
+  const getAdvantageLabel = (adv: string) => {
+    if (adv === 'favourable') return 'FAVOURABLE';
+    if (adv === 'unfavourable') return 'UNFAVOURABLE';
+    return 'NEUTRAL';
   };
 
   return (
@@ -129,11 +173,11 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        
+
         {/* TOP: LIVE BATTLEFIELD DRAFT BOARD */}
         <div className="battlefield">
           <div className="team-section">
-            <h3 className="team-header blue-txt"><Shield size={16}/> ALLIED SQUADRON</h3>
+            <h3 className="team-header blue-txt"><Shield size={16} /> ALLIED SQUADRON</h3>
             <div className="team-roster blue">
               {ALL_ROLES.map((r) => {
                 if (r === role) {
@@ -166,7 +210,7 @@ export default function App() {
           <div className="vs-badge">VS</div>
 
           <div className="team-section">
-            <h3 className="team-header red-txt"><Crosshair size={16}/> HOSTILE FORCES</h3>
+            <h3 className="team-header red-txt"><Crosshair size={16} /> HOSTILE FORCES</h3>
             <div className="team-roster red">
               {ALL_ROLES.map((r, arrayIndex) => {
                 const e = enemies[arrayIndex];
@@ -189,10 +233,9 @@ export default function App() {
 
         {/* BOTTOM: COMMAND & DOSSIER */}
         <div className="lower-command">
-          
-          <div className="panel context-controls">
-            <div className="panel-header"><Radar size={16}/> MISSION PARAMETERS</div>
 
+          <div className="panel context-controls">
+            <div className="panel-header"><Radar size={16} /> MISSION PARAMETERS</div>
 
             <div className="control-group">
               <label>Draft Phase / Pick #</label>
@@ -218,13 +261,47 @@ export default function App() {
               </div>
             </div>
 
-            <button className="analyze-btn mt-2" onClick={getRecommendation}>
-              {loading ? <><Activity className="spin" size={20}/> ANALYZING...</> : 'INITIALIZE HUD'}
+            {/* Summoner Identity Section */}
+            <div className="control-group summoner-group">
+              <label><User size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Summoner (Optional)</label>
+              <div className="summoner-inputs">
+                <input
+                  type="text"
+                  className="summoner-input"
+                  placeholder="Game Name"
+                  value={gameName}
+                  onChange={e => setGameName(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="summoner-input tag-input"
+                  placeholder="Tag"
+                  value={tagLine}
+                  onChange={e => setTagLine(e.target.value)}
+                />
+              </div>
+              <select className="region-select" value={region} onChange={e => setRegion(e.target.value)}>
+                <option value="euw">EUW</option>
+                <option value="eune">EUNE</option>
+                <option value="na">NA</option>
+                <option value="kr">KR</option>
+                <option value="br">BR</option>
+                <option value="jp">JP</option>
+                <option value="oce">OCE</option>
+                <option value="lan">LAN</option>
+                <option value="las">LAS</option>
+                <option value="tr">TR</option>
+                <option value="ru">RU</option>
+              </select>
+            </div>
+
+            <button className="analyze-btn mt-2" onClick={fetchRecommendation}>
+              {loading ? <><Activity className="spin" size={20} /> ANALYZING...</> : 'INITIALIZE HUD'}
             </button>
           </div>
 
           <div className={`panel dossier ${recommendation ? 'active' : ''}`}>
-            <div className="panel-header"><Cpu size={16}/> TACTICAL DOSSIER</div>
+            <div className="panel-header"><Cpu size={16} /> TACTICAL DOSSIER</div>
 
             {loading ? (
               <div className="compiling-state">
@@ -237,33 +314,71 @@ export default function App() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
                 <div className="verdict-col">
                   <div className="verdict-label">PRIMARY DIRECTIVE</div>
-                  <div className="champ-avatar best">
-                    <img src={recommendation.best.image} alt={recommendation.best.name} />
-                    <div className="overall-score">{recommendation.best.score}</div>
+                  <div className={`champ-avatar best ${hoveredChamp ? 'dimmed' : ''}`}>
+                    <img src={activeChamp?.image} alt={activeChamp?.name} />
+                    <div className="overall-score">{activeChamp?.score}</div>
                   </div>
-                  <h3 className="main-champ-name">{recommendation.best.name.toUpperCase()}</h3>
+                  <h3 className="main-champ-name">{activeChamp?.name?.toUpperCase()}</h3>
                   <div className="tags">
-                    {recommendation.best.tags.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
+                    {activeChamp?.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
                   </div>
+
+                  {/* Win Rate Gauge */}
+                  {activeChamp?.draftAdvantage && (
+                    <div className="wr-gauge">
+                      <div className="wr-gauge-track">
+                        <div className="wr-zone unfav"></div>
+                        <div className="wr-zone neut"></div>
+                        <div className="wr-zone fav"></div>
+                        <motion.div
+                          className="wr-needle"
+                          initial={{ left: '50%' }}
+                          animate={{ left: `${Math.max(5, Math.min(95, ((activeChamp.estimatedWR - 35) / 30) * 100))}%` }}
+                          transition={{ duration: 0.6, ease: 'easeOut' }}
+                        />
+                      </div>
+                      <div className="wr-label" style={{ color: getAdvantageColor(activeChamp.draftAdvantage) }}>
+                        {getAdvantageLabel(activeChamp.draftAdvantage)}
+                        <span className="wr-pct">{activeChamp.estimatedWR}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reasons */}
+                  {activeChamp?.reasons?.length > 0 && (
+                    <div className="reasons-list">
+                      {activeChamp.reasons.slice(0, 3).map((r: string, i: number) => (
+                        <motion.div
+                          key={r}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 * i }}
+                          className="reason-item"
+                        >
+                          <TrendingUp size={10} />
+                          <span>{r}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="evidence-col">
-                  <div className="evidence-label">ANALYTICS BREAKDOWN</div>
-                  {recommendation.best.scores && ['draftScore', 'teamCompScore', 'synergyScore', 'counterScore', 'metaScore'].map(key => {
-                    const score = recommendation.best.scores[key] || 0;
-                    const displayLabel = key.replace('Score', '').replace('teamComp', 'Comp');
-                    // Scores are roughly normalized 0-100 now. Sometimes slightly higher or lower. We cap rendering at 100%.
+                  <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
+                  {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label }) => {
+                    const score = activeChamp.scores[key] || 0;
                     const barWidth = Math.max(0, Math.min(100, score));
-                    
+
                     return (
                       <div className="data-row" key={key}>
-                        <div className="data-label">{displayLabel}</div>
+                        <div className="data-label">{label}</div>
                         <div className="data-bar-bg">
-                          <motion.div 
-                            initial={{ width: 0 }} 
-                            animate={{ width: `${barWidth}%` }} 
-                            transition={{ duration: 0.8, ease: 'easeOut' }}
-                            className="data-bar-fill" 
+                          <motion.div
+                            key={`${activeChamp.id}-${key}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${barWidth}%` }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
+                            className="data-bar-fill"
                             style={{ backgroundColor: getScoreColor(barWidth) }}
                           />
                         </div>
@@ -277,9 +392,18 @@ export default function App() {
                       <div className="evidence-label">VIABLE ALTERNATIVES</div>
                       <div className="alt-list">
                         {recommendation.alternatives.map((alt: any, idx: number) => (
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + idx * 0.1 }} key={alt.id} className="alt-card">
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 + idx * 0.1 }}
+                            key={alt.id}
+                            className={`alt-card ${hoveredChamp?.id === alt.id ? 'alt-active' : ''}`}
+                            onMouseEnter={() => setHoveredChamp(alt)}
+                            onMouseLeave={() => setHoveredChamp(null)}
+                          >
                             <img src={alt.image} alt={alt.name} />
                             <div className="alt-name">{alt.name.toUpperCase()}</div>
+                            <div className="alt-score">{alt.score}</div>
                           </motion.div>
                         ))}
                       </div>

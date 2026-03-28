@@ -27,13 +27,38 @@ It analyzes your team, the enemy team, pick order, and role to generate a compet
 
 ## 🏗️ Architecture
 
-This project follows a simple full-stack architecture:
+LOLPicker now uses a multi-service architecture:
 
 Frontend (React + Vite)  
 ↓  
 Backend API (Node.js + Express)  
 ↓  
-Champion Data (Riot Data Dragon)  
+Python Microservices (FastAPI)  
+↓  
+External Data Sources (Meta statistics, aggregated match data)
+
+### Services
+
+- **Frontend** — static app (GitHub Pages)
+- **Backend (Node.js)** — orchestrates scoring and draft logic
+- **Meta Service (Python)** — provides patch/role/elo-based champion strength
+- **OPGG MCP Service (Python)** — provides matchup and player-related data
+
+## 🐍 Python Microservices
+
+The project uses Python FastAPI services to fetch and process external data.
+
+These services are required for full functionality.
+
+### Services:
+
+- Meta Service → `/meta` (port 8001)
+- OPGG MCP Service → `/mcp` (port 8000)
+
+The Node backend depends on these services for:
+- Meta scoring
+- Champion statistics
+- Counter data
 
 ---
 
@@ -50,7 +75,11 @@ Champion Data (Riot Data Dragon)
 - Node.js
 - Express
 - TypeScript
-- Riot Data Dragon API
+
+### Python Services
+- FastAPI
+- Uvicorn
+- Requests
 
 ### Deployment
 - GitHub Pages (Frontend)
@@ -204,6 +233,12 @@ https://meisgooddev.github.io/lolpicker/
 
 ⚠️ Note:
 If the backend has been inactive, the first request may take a few seconds to respond.
+
+ALSO:
+This project uses multiple services.  
+If the Python services are not running or reachable, recommendations will fail.
+
+In production, all services must be deployed and properly connected.
 
 ---
 

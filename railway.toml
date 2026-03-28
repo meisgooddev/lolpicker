@@ -1,0 +1,24 @@
+[build]
+  builder = "nixpacks"
+
+[[services]]
+  name = "backend"
+  source = "backend"
+
+  [services.build]
+    buildCommand = "npm install"
+
+  [services.deploy]
+    startCommand = "npm start"
+    restartPolicyType = "on_failure"
+
+[[services]]
+  name = "meta-service"
+  source = "meta_service"
+
+  [services.build]
+    buildCommand = "pip install -r requirements.txt"
+
+  [services.deploy]
+    startCommand = "uvicorn meta_fetcher:app --host 0.0.0.0 --port 8001"
+    restartPolicyType = "on_failure"
