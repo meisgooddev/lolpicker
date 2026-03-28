@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const META_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8001';
+const META_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8001') + '/mcp';
 
 export interface MCPChampionData {
   weak_counters: Array<{ champion_id: number; champion_name: string; play: number; win: number; win_rate: number }>;
