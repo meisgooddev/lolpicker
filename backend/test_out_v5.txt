@@ -1,0 +1,82 @@
+Loaded 172 champions from patch 16.6.1
+[MetaService] Fetching external meta statistics via Python microservice for patch 16.6.1...
+[MetaService] Loaded 48 stats for Top from microservice.
+[MetaService] Loaded 48 stats for Jungle from microservice.
+[MetaService] Loaded 39 stats for Mid from microservice.
+[MetaService] Loaded 25 stats for ADC from microservice.
+[MetaService] Loaded 36 stats for Support from microservice.
+=== SCENARIO 1: Top vs 3 AD (Expect Malphite top 3) ===
+1. Shen (Total: 510)
+   Normed: Draft:33 Comp:91 Syn:0 Counter:51 Meta:90 Temp:40 Exec:63 Player:45 OPGG:88
+   RAW   : Draft:5 Comp:61.8 Syn:0 Counter:31.7 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:15.8
+2. Olaf (Total: 491)
+   Normed: Draft:42 Comp:94 Syn:0 Counter:38 Meta:90 Temp:40 Exec:63 Player:45 OPGG:68
+   RAW   : Draft:10 Comp:64.9 Syn:0 Counter:15.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:8.8
+3. Garen (Total: 489)
+   Normed: Draft:33 Comp:91 Syn:0 Counter:38 Meta:90 Temp:40 Exec:63 Player:45 OPGG:88
+   RAW   : Draft:5 Comp:62.1 Syn:0 Counter:15.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:15.8
+4. Sett (Total: 489)
+   Normed: Draft:33 Comp:91 Syn:0 Counter:38 Meta:90 Temp:40 Exec:63 Player:45 OPGG:88
+   RAW   : Draft:5 Comp:62.1 Syn:0 Counter:15.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:15.8
+
+!!! Expected Malphite was not in the top 4 !!!
+   --> Malphite is rank 15 with score 462
+   Normed: Draft:8 Comp:95 Syn:0 Counter:40 Meta:90 Temp:40 Exec:63 Player:45 OPGG:88
+   RAW   : Draft:-10 Comp:65.6 Syn:0 Counter:18.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:15.8
+
+=== SCENARIO 2: Mid vs 3 AP (Expect Kassadin top 3) ===
+1. Galio (Total: 545)
+   Normed: Draft:42 Comp:97 Syn:0 Counter:96 Meta:90 Temp:40 Exec:63 Player:45 OPGG:43
+   RAW   : Draft:10 Comp:67.7 Syn:0 Counter:85.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:0
+2. Lissandra (Total: 534)
+   Normed: Draft:33 Comp:94 Syn:0 Counter:83 Meta:90 Temp:40 Exec:63 Player:45 OPGG:68
+   RAW   : Draft:5 Comp:64.5 Syn:0 Counter:70.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:8.8
+3. Ahri (Total: 514)
+   Normed: Draft:33 Comp:86 Syn:0 Counter:75 Meta:90 Temp:40 Exec:50 Player:45 OPGG:87
+   RAW   : Draft:5 Comp:57.0 Syn:0 Counter:60.0 Meta:25.0 Temp:0 Exec:0 Player:0 OPGG:15.4
+4. Ekko (Total: 497)
+   Normed: Draft:42 Comp:86 Syn:0 Counter:75 Meta:90 Temp:40 Exec:50 Player:45 OPGG:44
+   RAW   : Draft:10 Comp:57.0 Syn:0 Counter:60.0 Meta:25.0 Temp:0 Exec:0 Player:0 OPGG:0.40000000000000036
+
+!!! Expected Kassadin was not in the top 4 !!!
+   --> Kassadin is rank 5 with score 492
+   Normed: Draft:25 Comp:86 Syn:0 Counter:88 Meta:90 Temp:40 Exec:50 Player:45 OPGG:43
+   RAW   : Draft:0 Comp:57.0 Syn:0 Counter:75.0 Meta:25.0 Temp:0 Exec:0 Player:0 OPGG:0
+
+=== SCENARIO 3: ADC with Engage Support (Expect Jinx higher) ===
+1. Miss Fortune (Total: 611)
+   Normed: Draft:58 Comp:78 Syn:73 Counter:25 Meta:90 Temp:70 Exec:50 Player:45 OPGG:68
+   RAW   : Draft:20 Comp:50.1 Syn:40 Counter:0.0 Meta:25.0 Temp:15 Exec:0 Player:0 OPGG:8.8
+2. Xayah (Total: 596)
+   Normed: Draft:42 Comp:78 Syn:73 Counter:25 Meta:90 Temp:70 Exec:50 Player:45 OPGG:68
+   RAW   : Draft:10 Comp:50.1 Syn:40 Counter:0.0 Meta:25.0 Temp:15 Exec:0 Player:0 OPGG:8.8
+3. Kai'Sa (Total: 586)
+   Normed: Draft:33 Comp:78 Syn:73 Counter:25 Meta:90 Temp:70 Exec:50 Player:45 OPGG:65
+   RAW   : Draft:5 Comp:50.1 Syn:40 Counter:0.0 Meta:25.0 Temp:15 Exec:0 Player:0 OPGG:7.6
+4. Ezreal (Total: 579)
+   Normed: Draft:58 Comp:78 Syn:58 Counter:25 Meta:90 Temp:70 Exec:50 Player:45 OPGG:47
+   RAW   : Draft:20 Comp:50.1 Syn:32 Counter:0.0 Meta:25.0 Temp:15 Exec:0 Player:0 OPGG:1.5999999999999996
+
+!!! Expected Jinx was not in the top 4 !!!
+   --> Jinx is rank 9 with score 549
+   Normed: Draft:17 Comp:78 Syn:73 Counter:25 Meta:90 Temp:40 Exec:50 Player:45 OPGG:88
+   RAW   : Draft:-5 Comp:50.1 Syn:40 Counter:0.0 Meta:25.0 Temp:0 Exec:0 Player:0 OPGG:15.8
+
+=== SCENARIO 4: First pick mid (Expect safe blinds like Ahri/Orianna) ===
+1. Galio (Total: 532)
+   Normed: Draft:100 Comp:97 Syn:0 Counter:25 Meta:90 Temp:40 Exec:63 Player:45 OPGG:43
+   RAW   : Draft:45 Comp:67.7 Syn:0 Counter:0.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:0
+2. Diana (Total: 507)
+   Normed: Draft:83 Comp:87 Syn:0 Counter:25 Meta:90 Temp:40 Exec:63 Player:45 OPGG:51
+   RAW   : Draft:35 Comp:57.9 Syn:0 Counter:0.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:2.8000000000000007
+3. Lux (Total: 502)
+   Normed: Draft:100 Comp:88 Syn:0 Counter:25 Meta:90 Temp:40 Exec:38 Player:45 OPGG:51
+   RAW   : Draft:45 Comp:59.5 Syn:0 Counter:0.0 Meta:25.0 Temp:0 Exec:-5 Player:0 OPGG:2.8000000000000007
+4. Lissandra (Total: 497)
+   Normed: Draft:58 Comp:94 Syn:0 Counter:25 Meta:90 Temp:40 Exec:63 Player:45 OPGG:68
+   RAW   : Draft:20 Comp:64.5 Syn:0 Counter:0.0 Meta:25.0 Temp:0 Exec:5 Player:0 OPGG:8.8
+
+!!! Expected Ahri was not in the top 4 !!!
+   --> Ahri is rank 8 with score 468
+   Normed: Draft:42 Comp:86 Syn:0 Counter:25 Meta:90 Temp:40 Exec:50 Player:45 OPGG:87
+   RAW   : Draft:10 Comp:57.0 Syn:0 Counter:0.0 Meta:25.0 Temp:0 Exec:0 Player:0 OPGG:15.4

@@ -913,7 +913,125 @@ input[type=range] {
 
 /* ── Data label wider for 9 dimensions ──────────────────────────────── */
 .data-label {
-  width: 75px;
+  width: 90px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-icon {
+  position: relative;
+  cursor: help;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+}
+
+.info-icon:hover {
+  color: var(--text-primary);
+}
+
+.info-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-float);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 4px;
+  text-transform: none;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  white-space: normal;
+  width: 200px;
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-family: 'Inter', sans-serif;
+}
+
+.info-icon:hover .info-tooltip {
+  visibility: visible;
+  opacity: 1;
+  bottom: 150%;
+}
+
+/* ── Lane Matchup Indicator ────────────────────────────────────────── */
+.lane-matchup {
+  margin-top: 1rem;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lane-matchup-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+}
+
+.lane-matchup-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-text {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.status-text.favourable {
+  color: var(--score-good);
+}
+
+.status-text.even {
+  color: var(--accent-amber);
+}
+
+.status-text.difficult {
+  color: var(--score-bad);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-subtle);
+  opacity: 0.3;
+}
+
+.status-dot.active {
+  opacity: 1;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.status-dot.fav.active {
+  background: var(--score-good);
+  color: var(--score-good);
+}
+
+.status-dot.even.active {
+  background: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.status-dot.diff.active {
+  background: var(--score-bad);
+  color: var(--score-bad);
 }
 
 .mt-2 {

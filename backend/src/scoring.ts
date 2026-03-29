@@ -37,7 +37,9 @@ function hasCounterMatch(profile: ChampionProfile, enemies: string[], champions:
     const c = champions[enemyId];
     if (!c) continue;
     const enemy = getProfile(c, enemyRoles[enemyId] || 'Unknown');
-    for (const counter of profile.counters || []) {
+
+    const allCounters = [...(profile.counters || []), ...(profile.hardCounters || [])];
+    for (const counter of allCounters) {
       if (enemy.traits?.includes(counter) || enemy.style?.includes(counter) || enemy.damageType === counter) {
         return true;
       }
@@ -90,7 +92,10 @@ export function scoreDraftOrder(profile: ChampionProfile, state: DraftState, cha
   }
 
   if (profile.counterReliant && remainingEnemyPicks > 0) {
-    score -= remainingEnemyPicks * 5;
+    const countersEnemy = hasCounterMatch(profile, state.enemies, champions, state.enemyRoles);
+    if (!countersEnemy) {
+      score -= remainingEnemyPicks * 5;
+    }
   }
 
   return score;
@@ -324,25 +329,34 @@ export function scoreCounters(profile: ChampionProfile, enemies: string[], champ
     const actualRole = enemyRoles[enemyId] || 'Unknown';
     const enemy = getProfile(c, actualRole);
 
+    let matchedCounter = false;
+    let matchedHardCounter = false;
+    let matchedWeak = false;
+    let matchedHardWeak = false;
+
     for (const counter of profile.counters || []) {
-      if (enemy.traits?.includes(counter) || enemy.style?.includes(counter) || enemy.damageType === counter) {
+      if (!matchedCounter && (enemy.traits?.includes(counter) || enemy.style?.includes(counter) || enemy.damageType === counter)) {
         score += 5 * heuristicScale;
+        matchedCounter = true;
       }
     }
     for (const hCounter of profile.hardCounters || []) {
-      if (enemy.traits?.includes(hCounter) || enemy.style?.includes(hCounter) || enemy.damageType === hCounter) {
+      if (!matchedHardCounter && (enemy.traits?.includes(hCounter) || enemy.style?.includes(hCounter) || enemy.damageType === hCounter)) {
         score += 15 * heuristicScale;
+        matchedHardCounter = true;
       }
     }
 
     for (const w of profile.weakInto || []) {
-      if (enemy.traits?.includes(w) || enemy.style?.includes(w) || enemy.damageType === w) {
+      if (!matchedWeak && (enemy.traits?.includes(w) || enemy.style?.includes(w) || enemy.damageType === w)) {
         score -= 5 * heuristicScale;
+        matchedWeak = true;
       }
     }
     for (const hw of profile.hardWeakInto || []) {
-      if (enemy.traits?.includes(hw) || enemy.style?.includes(hw) || enemy.damageType === hw) {
+      if (!matchedHardWeak && (enemy.traits?.includes(hw) || enemy.style?.includes(hw) || enemy.damageType === hw)) {
         score -= 15 * heuristicScale;
+        matchedHardWeak = true;
       }
     }
   }

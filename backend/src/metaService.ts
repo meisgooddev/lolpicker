@@ -17,22 +17,22 @@ const fallbackMap: Record<string, Record<string, number>> = {
 export async function fetchMetaStats(patch: string = latestPatch) {
   try {
     console.log(`[MetaService] Fetching external meta statistics via Python microservice for patch ${patch}...`);
-    
+
     if (!metaCache[patch]) metaCache[patch] = {};
     const roles = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'];
 
     for (const role of roles) {
       if (!metaCache[patch][role]) metaCache[patch][role] = {};
-      
+
       const elo = 'emerald_plus';
       if (!metaCache[patch][role][elo]) metaCache[patch][role][elo] = {};
-      
+
       try {
         const metaUrl = process.env.META_SERVICE_URL || 'http://127.0.0.1:8001';
         const response = await axios.get(`${metaUrl}/meta`, {
           params: { role: role.toLowerCase(), elo: 'emerald', patch }
         });
-        
+
         if (response.data && response.data.success) {
           const dict = response.data.data;
           metaCache[patch][role][elo] = { ...metaCache[patch][role][elo], ...dict };
@@ -61,8 +61,8 @@ export function getChampionMetaScore(championId: string, role: string, elo: stri
     if (roleStats && roleStats[championId] !== undefined) {
       return roleStats[championId];
     }
-  } catch(e) {}
-  
+  } catch (e) { }
+
   // Default to 5.0 (neutral) if no data or obscure off-meta pick
   return 5.0;
 }

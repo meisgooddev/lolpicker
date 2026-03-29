@@ -14,21 +14,22 @@ type ChampInfo = {
   reasons?: string[];
   estimatedWR?: number;
   draftAdvantage?: 'unfavourable' | 'neutral' | 'favourable';
+  laneDifficulty?: 'Favourable' | 'Even' | 'Difficult' | 'Unknown';
 };
 
 const ALL_ROLES = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'] as const;
 type RoleType = typeof ALL_ROLES[number];
 
-const SCORE_DIMENSIONS: { key: string; label: string; icon?: string }[] = [
-  { key: 'draftScore', label: 'Draft' },
-  { key: 'teamCompScore', label: 'Comp' },
-  { key: 'synergyScore', label: 'Synergy' },
-  { key: 'counterScore', label: 'Counter' },
-  { key: 'metaScore', label: 'Meta' },
-  { key: 'temporalScore', label: 'Timing' },
-  { key: 'executionScore', label: 'Execution' },
-  { key: 'playerAffinityScore', label: 'Mastery' },
-  { key: 'opggMetaScore', label: 'OP.GG Tier' },
+const SCORE_DIMENSIONS: { key: string; label: string; desc: string; icon?: string }[] = [
+  { key: 'draftScore', label: 'Draft', desc: "How well this champion fits the current pick order and draft position. Rewards safe blind picks early, counter picks late." },
+  { key: 'teamCompScore', label: 'Comp', desc: "How much this champion fills gaps in your team. Considers damage type, frontline, engage, peel, and scaling needs." },
+  { key: 'synergyScore', label: 'Synergy', desc: "How well this champion works with your allied picks based on what each champion provides and needs." },
+  { key: 'counterScore', label: 'Counter', desc: "Matchup advantage against enemy picks, combining real OP.GG win rate data with strategic trait analysis." },
+  { key: 'metaScore', label: 'Meta', desc: "Current patch strength based on Meraki Analytics win rate, pick rate, and ban rate data." },
+  { key: 'temporalScore', label: 'Timing', desc: "Whether this champion's power spike aligns with your team's intended game phase (early/mid/late)." },
+  { key: 'executionScore', label: 'Execution', desc: "How forgiving this champion is for imperfect play. Rewards picks that give your team a clear 'go' button." },
+  { key: 'playerAffinityScore', label: 'Mastery', desc: "Adjusted for your personal win rate and games played on this champion from your OP.GG profile." },
+  { key: 'opggMetaScore', label: 'OP.GG Tier', desc: "Direct tier rating from OP.GG for this role: OP → Strong → Good → Average → Weak." },
 ];
 
 export default function App() {
@@ -344,6 +345,21 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* Lane Matchup Indicator */}
+                  {activeChamp?.laneDifficulty && activeChamp.laneDifficulty !== 'Unknown' && (
+                    <div className="lane-matchup">
+                      <div className="lane-matchup-label">LANE MATCHUP</div>
+                      <div className="lane-matchup-status">
+                        <div className={`status-dot fav ${activeChamp.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
+                        <div className={`status-dot even ${activeChamp.laneDifficulty === 'Even' ? 'active' : ''}`} />
+                        <div className={`status-dot diff ${activeChamp.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
+                        <span className={`status-text ${activeChamp.laneDifficulty.toLowerCase()}`}>
+                          {activeChamp.laneDifficulty.toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Reasons */}
                   {activeChamp?.reasons?.length > 0 && (
                     <div className="reasons-list">
@@ -365,13 +381,19 @@ export default function App() {
 
                 <div className="evidence-col">
                   <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
-                  {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label }) => {
+                  {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label, desc }) => {
                     const score = activeChamp.scores[key] || 0;
                     const barWidth = Math.max(0, Math.min(100, score));
 
                     return (
                       <div className="data-row" key={key}>
-                        <div className="data-label">{label}</div>
+                        <div className="data-label">
+                          {label}
+                          <div className="info-icon">
+                            ⓘ
+                            <div className="info-tooltip">{desc}</div>
+                          </div>
+                        </div>
                         <div className="data-bar-bg">
                           <motion.div
                             key={`${activeChamp.id}-${key}`}
