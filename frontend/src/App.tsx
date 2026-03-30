@@ -20,16 +20,116 @@ type ChampInfo = {
 const ALL_ROLES = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'] as const;
 type RoleType = typeof ALL_ROLES[number];
 
-const SCORE_DIMENSIONS: { key: string; label: string; desc: string; icon?: string }[] = [
-  { key: 'draftScore', label: 'Draft', desc: "How well this champion fits the current pick order and draft position. Rewards safe blind picks early, counter picks late." },
-  { key: 'teamCompScore', label: 'Comp', desc: "How much this champion fills gaps in your team. Considers damage type, frontline, engage, peel, and scaling needs." },
-  { key: 'synergyScore', label: 'Synergy', desc: "How well this champion works with your allied picks based on what each champion provides and needs." },
-  { key: 'counterScore', label: 'Counter', desc: "Matchup advantage against enemy picks, combining real OP.GG win rate data with strategic trait analysis." },
-  { key: 'metaScore', label: 'Meta', desc: "Current patch strength based on Meraki Analytics win rate, pick rate, and ban rate data." },
-  { key: 'temporalScore', label: 'Timing', desc: "Whether this champion's power spike aligns with your team's intended game phase (early/mid/late)." },
-  { key: 'executionScore', label: 'Execution', desc: "How forgiving this champion is for imperfect play. Rewards picks that give your team a clear 'go' button." },
-  { key: 'playerAffinityScore', label: 'Mastery', desc: "Adjusted for your personal win rate and games played on this champion from your OP.GG profile." },
-  { key: 'opggMetaScore', label: 'OP.GG Tier', desc: "Direct tier rating from OP.GG for this role: OP → Strong → Good → Average → Weak." },
+const SCORE_DIMENSIONS: { key: string; label: string; desc: React.ReactNode; icon?: string }[] = [
+  {
+    key: 'draftScore',
+    label: 'Draft',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Draft Position Score</div>
+        How well this champion avoids counter-picks based on your pick order.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Perfect safe blind pick (e.g., Ahri/Orianna) when picking early, or highly effective counter-pick when picking last.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>10-30:</span> Dangerous spot. You are either blind-picking a highly counterable champion (e.g., Kassadin 1st pick) or exposing a fatal weakness.
+      </>
+    )
+  },
+  {
+    key: 'teamCompScore',
+    label: 'Comp',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Team Composition</div>
+        How much this champion provides what your team is critically lacking.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Plugs a massive hole in the draft (e.g., locking Amumu when your team has 0 engage and 0 AP).<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>10-30:</span> Redundant pick. E.g., picking a 3rd squishy AD poke champion when your team desperately needs magic damage and peel.
+      </>
+    )
+  },
+  {
+    key: 'synergyScore',
+    label: 'Synergy',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Allied Synergy Match</div>
+        Measures wombo-combo potential and trait synergies with locked allies.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Incredible synergy. The champion directly provides what an ally wants (e.g., Leona providing Engage for Jinx).<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>0-20:</span> Anti-synergy. The champion wants to dive deep while the rest of the team wants to kite backwards.
+      </>
+    )
+  },
+  {
+    key: 'counterScore',
+    label: 'Counter',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Enemy Matchups</div>
+        Matchup advantage against the entire enemy team, heavily weighted towards direct lane opponent.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Hard counters multiple enemies or completely obliterates the direct lane matchup.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>0-30:</span> Systematically shut down by the enemy traits or suffers from an unplayable lane disadvantage.
+      </>
+    )
+  },
+  {
+    key: 'metaScore',
+    label: 'Meta',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Current Meta Strength</div>
+        Champion's base strength outside of draft geometry, using Meraki Analytics.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> 52%+ Win-rate with high pick/ban presence. A genuinely free-elo patch for this champion.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>0-30:</span> Very weak in the current patch. Demands exceptionally good draft conditions to justify picking.
+      </>
+    )
+  },
+  {
+    key: 'temporalScore',
+    label: 'Timing',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Power Curve Alignment</div>
+        Whether your champion spikes at the exact same time as your team.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Enhances your team's win condition (e.g., full early game snowball or pure late game scaling).<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>10-30:</span> Your team wants to scale for 40 mins, but this champion needs to end the game at 20 mins to be useful.
+      </>
+    )
+  },
+  {
+    key: 'executionScore',
+    label: 'Execution',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Execution Reliability</div>
+        How forgiving this champion is for human imperfection in Solo Queue.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Has a clear 'GO' button (e.g., Malphite) or serves as a solid anchor, making teamfights extremely simple.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>0-30:</span> Adds severe fragility to your comp. Ex: picking a 3rd fragile hypercarry with no peel, demanding pixel-perfect spacing.
+      </>
+    )
+  },
+  {
+    key: 'playerAffinityScore',
+    label: 'Mastery',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>Personal Performance</div>
+        If your Summoner name is provided, checks your actual OP.GG mastery.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Comfort pick. You have a positive win-rate (+55%) in a decent sample size.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>10-30:</span> Sub 50% win rate or you are first-timing a mechanically intensive champion.<br />
+        <span style={{ color: '#94a3b8', fontWeight: 600 }}>0: </span> Dimension nullified if no summoner data is present.
+      </>
+    )
+  },
+  {
+    key: 'opggMetaScore',
+    label: 'OP.GG Tier',
+    desc: (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: '4px', color: '#e2e8f0' }}>OP.GG Native Tier</div>
+        The direct snapshot of the champion's role classification on OP.GG.<br /><br />
+        <span style={{ color: '#10b981', fontWeight: 600 }}>80-100:</span> Tier 1 (OP) or Tier 2 (Strong) in this exact role.<br />
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>0-30:</span> Tier 5 (Weak) or widely considered a troll-pick for this role.
+      </>
+    )
+  },
 ];
 
 export default function App() {

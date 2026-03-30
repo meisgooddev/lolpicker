@@ -122,22 +122,67 @@ export async function getRecommendation(state: DraftState, gameName?: string, ta
 
     // ── Reason generation ──────────────────────────────────────────────────
     const reasons: string[] = [];
-    if (weightedCounterScore > 70) reasons.push('Counters enemy composition\'s primary win condition');
-    else if (weightedCounterScore > 50) reasons.push('Favourable matchup against enemy picks');
-    if (weightedSynergyScore > 65) reasons.push('Strong synergy with allied picks');
-    else if (weightedSynergyScore > 45) reasons.push('Good fit with team\'s strategic direction');
-    if (weightedTemporalScore > 70) reasons.push('Power curve aligns with team\'s timing');
-    else if (weightedTemporalScore > 50) reasons.push('Acceptable power timing for this comp');
-    if (weightedTeamCompScore > 70) reasons.push('Fills critical composition gaps');
-    else if (weightedTeamCompScore > 50) reasons.push('Strengthens overall team balance');
-    if (weightedDraftScore > 60) reasons.push('Excellent pick for this draft position');
-    if (weightedExecutionScore > 60) reasons.push('Stabilises team execution reliability');
-    if (weightedPlayerScore > 70) reasons.push('High personal mastery — comfort pick');
-    else if (weightedPlayerScore > 50) reasons.push('Part of your active champion pool');
-    if (weightedOpggMetaScore > 50) reasons.push('Currently strong in the meta');
-    if (weightedMetaScore > 60) reasons.push('Statistically overperforming this patch');
 
-    if (reasons.length === 0) reasons.push('Solid all-round pick for this situation');
+    // 1. Specific Counter Matchups
+    const hardCounteredEnemies = state.enemies.filter(eid => {
+      const ep = getProfile(champions[eid], state.enemyRoles[eid] || 'Unknown');
+      return profile.hardCounters?.some(hc => ep.traits?.includes(hc) || ep.style?.includes(hc) || ep.damageType === hc);
+    }).map(eid => champions[eid]?.name);
+
+    if (hardCounteredEnemies.length > 0) {
+      reasons.push(`Hard counters ${hardCounteredEnemies.join(', ')}`);
+    } else if (weightedCounterScore > 65) {
+      reasons.push(`Strong statistical matchup against enemy picks`);
+    }
+
+    // 2. Exact Comp Gaps
+    const profileStyle = profile.style || [];
+    if (needs.needsFrontline > 0.6 && (profileStyle.includes('Frontline') || profile.traits?.includes('Tank'))) {
+      reasons.push(`Fills frontline gap — team currently lacks a solid anchor`);
+    } else if (needs.needsEngage > 0.6 && profileStyle.includes('Engage')) {
+      reasons.push(`Provides the primary engage tool your team desperately needs`);
+    } else if (needs.needsAP > 0.6 && profile.damageType === 'AP') {
+      reasons.push(`Crucial AP damage source to prevent enemies stacking Armor`);
+    } else if (needs.needsAD > 0.6 && profile.damageType === 'AD') {
+      reasons.push(`Essential physical damage source to balance team composition`);
+    } else if (weightedTeamCompScore > 70) {
+      reasons.push(`Excellent fit for team's overall identity and scaling needs`);
+    }
+
+    // 3. Exact Synergy Matchups
+    if (weightedSynergyScore > 65) {
+      reasons.push(`High trait/wombo-combo synergy with locked allies`);
+    }
+
+    // 4. Power Spike / Temporal
+    if (state.allies.length > 0 && profile.peakPhase && temporal.intendedTiming !== 'flex' && profile.peakPhase === temporal.intendedTiming) {
+      reasons.push(`Power spike gracefully aligns with team's ${profile.peakPhase}-game window`);
+    }
+
+    // 5. Execution Complexity
+    if (weightedExecutionScore > 65) {
+      reasons.push(`Stabilises draft by providing an easy-to-execute 'GO' button`);
+    }
+
+    // 6. Player Comfort
+    const poolEntry = opggSummonerData?.champion_pool.find(p => p.champion_name === profile.name);
+    if (poolEntry) {
+      if (poolEntry.play >= 20 && poolEntry.win / poolEntry.play > 0.5) {
+        reasons.push(`${poolEntry.play} games played with ${(poolEntry.win / poolEntry.play * 100).toFixed(0)}% WR — proven comfort pick`);
+      } else if (poolEntry.play >= 10) {
+        reasons.push(`Part of your active champion pool (${poolEntry.play} games)`);
+      }
+    }
+
+    // 7. Meta / Draft Safety
+    if (reasons.length < 3 && weightedDraftScore > 60) {
+      reasons.push(`Exceptionally safe blind pick for this draft position`);
+    }
+    if (reasons.length < 3 && weightedOpggMetaScore > 50) {
+      reasons.push(`Currently dominant in the OP.GG meta for this role`);
+    }
+
+    if (reasons.length === 0) reasons.push('Solid all-round tactical pick');
 
     // ── Draft advantage estimation ────────────────────────────────────────
     // Anchored by OP.GG champion win rate when available, offset by draft score.
@@ -166,7 +211,8 @@ export async function getRecommendation(state: DraftState, gameName?: string, ta
     else draftAdvantage = 'neutral';
 
     let laneDifficulty: 'Favourable' | 'Even' | 'Difficult' | 'Unknown' = 'Unknown';
-    const directEnemyIndex = state.enemies.findIndex(e => state.enemyRoles[e] === state.role);
+    const searchRole = state.role.toLowerCase();
+    const directEnemyIndex = state.enemies.findIndex(e => (state.enemyRoles[e] || '').toLowerCase() === searchRole);
     if (directEnemyIndex !== -1) {
       const eData = opggEnemyData[directEnemyIndex];
       const enemyC = champions[state.enemies[directEnemyIndex]];

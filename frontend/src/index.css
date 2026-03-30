@@ -942,13 +942,13 @@ input[type=range] {
   background: var(--surface-float);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 12px 14px;
+  border-radius: 6px;
   text-transform: none;
   font-size: 0.65rem;
-  line-height: 1.4;
+  line-height: 1.5;
   white-space: normal;
-  width: 200px;
+  width: 280px;
   backdrop-filter: blur(10px);
   z-index: 100;
   transition: all 0.2s ease;
@@ -966,19 +966,21 @@ input[type=range] {
 /* ── Lane Matchup Indicator ────────────────────────────────────────── */
 .lane-matchup {
   margin-top: 1rem;
-  padding: 8px 12px;
+  padding: 8px 10px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .lane-matchup-label {
-  font-size: 0.65rem;
+  font-size: 0.60rem;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: var(--text-secondary);
 }
 
@@ -989,9 +991,9 @@ input[type=range] {
 }
 
 .status-text {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
 .status-text.favourable {

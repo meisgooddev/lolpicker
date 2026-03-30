@@ -1,1 +1,9 @@
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+meta_service/venv/
+__pycache__/
 .DS_Store
+*.log
+.env
