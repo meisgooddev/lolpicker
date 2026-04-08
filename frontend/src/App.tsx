@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search, Shield, Crosshair, Radar, Terminal, Activity, Cpu, User, TrendingUp } from 'lucide-react'
 import axios from 'axios'
@@ -6,7 +6,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type ChampInfo = {
   id: string;
+  key?: number;
   name: string;
+  validRoles?: string[];
   tags: string[];
   image: string;
   score?: number;
@@ -153,6 +155,115 @@ export default function App() {
   const [modalTarget, setModalTarget] = useState<{ type: 'ally' | 'enemy', index: number } | null>(null);
   const [search, setSearch] = useState('');
 
+  const [lcuData, setLcuData] = useState<any>(null);
+  const lastFetchHash = useRef('');
+
+  useEffect(() => {
+    if ((window as any).require) {
+      const { ipcRenderer } = (window as any).require('electron');
+      const handler = (_event: any, data: any) => setLcuData(data);
+      ipcRenderer.on('lcu-draft-update', handler);
+      return () => ipcRenderer.removeListener('lcu-draft-update', handler);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!lcuData || championList.length === 0) return;
+
+    const roleMap: Record<string, RoleType> = {
+      'top': 'Top', 'jungle': 'Jungle', 'middle': 'Mid', 'bottom': 'ADC', 'utility': 'Support', '': 'Mid'
+    };
+
+    const myTeam = lcuData.myTeam || [];
+    const theirTeam = lcuData.theirTeam || [];
+    const localPlayer = myTeam.find((c: any) => c.cellId === lcuData.localPlayerCellId);
+
+    let currentRole = role;
+    if (localPlayer && localPlayer.assignedPosition && roleMap[localPlayer.assignedPosition]) {
+      currentRole = roleMap[localPlayer.assignedPosition];
+      setRole(currentRole);
+    }
+
+    const isBlue = myTeam.length > 0 && myTeam[0].cellId < 5;
+    setSide(isBlue ? 'blue' : 'red');
+
+    const remainingAllyRoles = ALL_ROLES.filter(r => r !== currentRole);
+    const newAllies: (ChampInfo | null)[] = [null, null, null, null];
+    let fallbackAllyIdx = 0;
+
+    myTeam.forEach((member: any) => {
+      if (member.cellId === lcuData.localPlayerCellId) return;
+      if (member.championId > 0) {
+        const champ = championList.find(c => c.key === member.championId);
+        if (champ) {
+          const memberRole = roleMap[member.assignedPosition];
+          const idx = remainingAllyRoles.indexOf(memberRole);
+          if (idx !== -1 && !newAllies[idx]) newAllies[idx] = champ;
+          else {
+            while (fallbackAllyIdx < 4 && newAllies[fallbackAllyIdx]) fallbackAllyIdx++;
+            if (fallbackAllyIdx < 4) { newAllies[fallbackAllyIdx] = champ; fallbackAllyIdx++; }
+          }
+        }
+      }
+    });
+
+    const enemyMembers = [...theirTeam].sort((a: any, b: any) => a.cellId - b.cellId);
+    const lockedEnemies: ChampInfo[] = [];
+    enemyMembers.forEach((e: any) => {
+      if (e.championId > 0) {
+        const champ = championList.find(c => c.key === e.championId);
+        if (champ) lockedEnemies.push(champ);
+      }
+    });
+
+    const assignEnemiesToRoles = (enemyList: ChampInfo[]): (ChampInfo | null)[] => {
+      const result: (ChampInfo | null)[] = [null, null, null, null, null];
+      const sortedEnemies = [...enemyList].sort((a, b) => (a.validRoles?.length || 5) - (b.validRoles?.length || 5));
+      const backtrack = (idx: number, current: (ChampInfo | null)[]): (ChampInfo | null)[] | null => {
+        if (idx === sortedEnemies.length) return current;
+        const enemy = sortedEnemies[idx];
+        const preferredRoles = enemy.validRoles && enemy.validRoles.length > 0 ? enemy.validRoles : ALL_ROLES;
+        for (const role of preferredRoles) {
+          const roleIdx = ALL_ROLES.indexOf(role as RoleType);
+          if (roleIdx !== -1 && !current[roleIdx]) {
+            const next = [...current];
+            next[roleIdx] = enemy;
+            const res = backtrack(idx + 1, next);
+            if (res) return res;
+          }
+        }
+        return null;
+      };
+      let best = backtrack(0, result);
+      if (!best) {
+        best = [...result];
+        const unassigned: ChampInfo[] = [];
+        for (const enemy of sortedEnemies) {
+          let placed = false;
+          const preferredRoles = enemy.validRoles && enemy.validRoles.length > 0 ? enemy.validRoles : ALL_ROLES;
+          for (const role of preferredRoles) {
+            const roleIdx = ALL_ROLES.indexOf(role as RoleType);
+            if (roleIdx !== -1 && !best[roleIdx]) {
+              best[roleIdx] = enemy;
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) unassigned.push(enemy);
+        }
+        for (let i = 0; i < 5; i++) {
+          if (!best[i] && unassigned.length > 0) best[i] = unassigned.shift()!;
+        }
+      }
+      return best;
+    };
+
+    const newEnemies = assignEnemiesToRoles(lockedEnemies);
+
+    setAllies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newAllies.map(c => c?.id)) ? prev : newAllies);
+    setEnemies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newEnemies.map(c => c?.id)) ? prev : newEnemies);
+  }, [lcuData, championList]);
+
   useEffect(() => {
     axios.get(`${API_URL}/api/champions`).then(res => {
       setChampionList(res.data);
@@ -239,6 +350,17 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}`;
+    if (lcuData && hash !== lastFetchHash.current) {
+      const timer = setTimeout(() => {
+        lastFetchHash.current = hash;
+        fetchRecommendation();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [role, side, allies, enemies, lcuData]);
 
   const filteredChamps = Array.isArray(championList)
     ? championList.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))

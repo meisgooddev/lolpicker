@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 *.log
 .env
+frontend/dist_electron/
+frontend/build_out.txt

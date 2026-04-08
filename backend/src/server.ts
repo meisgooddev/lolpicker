@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post('/api/recommend', async (req, res) => {
+app.post('/api/recommend', async (req: express.Request, res: express.Response) => {
   const { role, side, allies = [], enemies = [], allyRoles = {}, enemyRoles = {}, gameName, tagLine, region } = req.body;
   try {
     for (const a of allies) {
@@ -24,15 +24,20 @@ app.post('/api/recommend', async (req, res) => {
   }
 });
 
-app.get('/api/champions', (req, res) => {
+app.get('/api/champions', (req: express.Request, res: express.Response) => {
   // Return minimal list
-  import('./data.js').then(m => {
-    res.json(Object.values(m.champions).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      tags: c.tags,
-      image: `https://ddragon.leagueoflegends.com/cdn/${m.latestPatch}/img/champion/${c.image.full}`
-    })));
+  Promise.all([import('./data.js'), import('./rolePool.js')]).then(([m, rp]) => {
+    res.json(Object.values(m.champions).map((c: any) => {
+      const validRoles = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'].filter(r => rp.rolePool[r]?.includes(c.id));
+      return {
+        id: c.id,
+        key: parseInt(c.key, 10),
+        name: c.name,
+        tags: c.tags,
+        validRoles,
+        image: `https://ddragon.leagueoflegends.com/cdn/${m.latestPatch}/img/champion/${c.image.full}`
+      };
+    }));
   });
 });
 
