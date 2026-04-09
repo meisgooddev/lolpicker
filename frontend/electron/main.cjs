@@ -18,6 +18,13 @@ async function setupLCU() {
         mainWindow.webContents.send('lcu-draft-update', data);
       }
     });
+
+    lcuWs.subscribe('/lol-gameflow/v1/gameflow-phase', (data, event) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('lcu-gameflow-update', data);
+      }
+    });
+
     console.log("Connected to LCU locally.");
   } catch (error) {
     console.warn("Could not connect to LCU", error.message);
@@ -26,18 +33,18 @@ async function setupLCU() {
 }
 
 ipcMain.handle('get-lcu-summoner', async () => {
-    try {
-        const credentials = await authenticate();
-        const res = await createHttp1Request({
-            method: 'GET',
-            url: '/lol-summoner/v1/current-summoner'
-        }, credentials);
-        const data = await res.json();
-        return data;
-    } catch (e) {
-        console.warn("Error fetching LCU summoner:", e.message);
-        return null;
-    }
+  try {
+    const credentials = await authenticate();
+    const res = await createHttp1Request({
+      method: 'GET',
+      url: '/lol-summoner/v1/current-summoner'
+    }, credentials);
+    const data = await res.json();
+    return data;
+  } catch (e) {
+    console.warn("Error fetching LCU summoner:", e.message);
+    return null;
+  }
 });
 
 function createWindow() {

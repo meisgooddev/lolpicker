@@ -136,7 +136,7 @@ const SCORE_DIMENSIONS: { key: string; label: string; desc: React.ReactNode; ico
 
 export default function App() {
   const [side, setSide] = useState<'blue' | 'red'>('blue');
-  const [role, setRole] = useState<RoleType>('Mid');
+  const [role, setRole] = useState<RoleType | null>(null);
   const [allies, setAllies] = useState<(ChampInfo | null)[]>([null, null, null, null]);
   const [enemies, setEnemies] = useState<(ChampInfo | null)[]>([null, null, null, null, null]);
   const [recommendation, setRecommendation] = useState<any>(null);
@@ -144,13 +144,14 @@ export default function App() {
   const [bans, setBans] = useState<string[]>([]);
   const [gamePlan, setGamePlan] = useState<any>(null);
   const [gamePlanStatus, setGamePlanStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [gamePlanError, setGamePlanError] = useState<{ code?: string; userMessage?: string; retryable?: boolean; requestId?: string }>({});
   const fetchingPlanRef = useRef(false);
 
   // Summoner identity for player affinity
   const [gameName, setGameName] = useState('');
   const [tagLine, setTagLine] = useState('');
   const [region] = useState('euw'); // setRegion removed since UI is hidden
-  const [useAffinity] = useState(true); // setUseAffinity removed since UI is hidden
+  const [useAffinity, setUseAffinity] = useState(true);
 
   // Auto-fetch summoner data via ipc on load
   useEffect(() => {
@@ -185,36 +186,86 @@ export default function App() {
   const [lcuData, setLcuData] = useState<any>(null);
   const lastFetchHash = useRef('');
 
+  // Track the LCU gameflow phase to distinguish dodge vs game-start
+  const [gameflowPhase, setGameflowPhase] = useState<string>('None');
+
   useEffect(() => {
     if ((window as any).require) {
       const { ipcRenderer } = (window as any).require('electron');
-      const handler = (_event: any, data: any) => setLcuData(data);
-      ipcRenderer.on('lcu-draft-update', handler);
-      return () => ipcRenderer.removeListener('lcu-draft-update', handler);
+      const draftHandler = (_event: any, data: any) => setLcuData(data);
+      const gameflowHandler = (_event: any, phase: any) => {
+        // The LCU sends the phase as a plain string like "ChampSelect", "InProgress", "Lobby", "None", etc.
+        const phaseStr = typeof phase === 'string' ? phase : String(phase);
+        console.log(`[LOLPicker] Gameflow phase: ${phaseStr}`);
+        setGameflowPhase(phaseStr);
+      };
+      ipcRenderer.on('lcu-draft-update', draftHandler);
+      ipcRenderer.on('lcu-gameflow-update', gameflowHandler);
+      return () => {
+        ipcRenderer.removeListener('lcu-draft-update', draftHandler);
+        ipcRenderer.removeListener('lcu-gameflow-update', gameflowHandler);
+      };
     }
   }, []);
 
+  // Determine if we are currently in-game (loading screen, active game, reconnect)
+  const isInGame = ['InProgress', 'GameStart', 'WaitingForStats', 'Reconnect'].includes(gameflowPhase);
+
+  // When the game ends and player returns to lobby, clear the persisted game plan
   useEffect(() => {
-    if (!lcuData || championList.length === 0) return;
+    if (['Lobby', 'None', 'EndOfGame'].includes(gameflowPhase) && (gamePlanStatus === 'ready' || gamePlanStatus === 'loading')) {
+      console.log(`[LOLPicker] Game ended (phase: ${gameflowPhase}). Clearing game plan.`);
+      setGamePlanStatus('idle');
+      setGamePlan(null);
+      setGamePlanError({});
+      fetchingPlanRef.current = false;
+    }
+  }, [gameflowPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!lcuData || lcuData.httpStatus === 404 || typeof lcuData.localPlayerCellId !== 'number') {
+      // If currently in-game, do NOT clear: the champ select session disappeared because
+      // the game started, not because of a dodge. Preserve everything.
+      if (isInGame) return;
+
+      // Otherwise this is a dodge or lobby exit — full reset.
+      setRole(null);
+      setAllies([null, null, null, null]);
+      setEnemies([null, null, null, null, null]);
+      setBans([]);
+      setRecommendation(null);
+      if (gamePlanStatus !== 'idle') {
+        setGamePlanStatus('idle');
+        setGamePlan(null);
+        setGamePlanError({});
+        fetchingPlanRef.current = false;
+      }
+      return;
+    }
+    if (championList.length === 0) return;
 
     const roleMap: Record<string, RoleType> = {
-      'top': 'Top', 'jungle': 'Jungle', 'middle': 'Mid', 'bottom': 'ADC', 'utility': 'Support', '': 'Mid'
+      'top': 'Top', 'jungle': 'Jungle', 'middle': 'Mid', 'bottom': 'ADC', 'utility': 'Support'
     };
 
     const myTeam = lcuData.myTeam || [];
     const theirTeam = lcuData.theirTeam || [];
     const localPlayer = myTeam.find((c: any) => c.cellId === lcuData.localPlayerCellId);
 
+    // Only update currentRole from LCU when the server has actually assigned a position
     let currentRole = role;
-    if (localPlayer && localPlayer.assignedPosition && roleMap[localPlayer.assignedPosition]) {
-      currentRole = roleMap[localPlayer.assignedPosition];
-      setRole(currentRole);
+    const lcuPosition = (localPlayer?.assignedPosition || '').toLowerCase();
+    if (lcuPosition && roleMap[lcuPosition]) {
+      currentRole = roleMap[lcuPosition];
+      if (currentRole !== role) {
+        setRole(currentRole);
+      }
     }
 
     const isBlue = myTeam.length > 0 && myTeam[0].cellId < 5;
     setSide(isBlue ? 'blue' : 'red');
 
-    const remainingAllyRoles = ALL_ROLES.filter(r => r !== currentRole);
+    const remainingAllyRoles = currentRole ? ALL_ROLES.filter(r => r !== currentRole) : ALL_ROLES.slice(0, 4);
     const newAllies: (ChampInfo | null)[] = [null, null, null, null];
     let fallbackAllyIdx = 0;
 
@@ -223,7 +274,8 @@ export default function App() {
       if (member.championId > 0) {
         const champ = championList.find(c => c.key === member.championId);
         if (champ) {
-          const memberRole = roleMap[member.assignedPosition];
+          const lcuMemberPos = (member.assignedPosition || '').toLowerCase();
+          const memberRole = roleMap[lcuMemberPos];
           const idx = remainingAllyRoles.indexOf(memberRole);
           if (idx !== -1 && !newAllies[idx]) newAllies[idx] = champ;
           else {
@@ -320,6 +372,13 @@ export default function App() {
     const myPickAction = flatActions.find((a: any) => a.actorCellId === lcuData.localPlayerCellId && a.type === 'pick');
     const isPlayerLockedIn = myPickAction ? myPickAction.completed : (localPlayer && localPlayer.championId > 0 && lcuData.timer.phase !== 'PLANNING');
 
+    if (!isPlayerLockedIn && gamePlanStatus !== 'idle') {
+      setGamePlanStatus('idle');
+      setGamePlan(null);
+      setGamePlanError({});
+      fetchingPlanRef.current = false;
+    }
+
     if (isPlayerLockedIn && localPlayer && localPlayer.championId > 0 && gamePlanStatus === 'idle' && !fetchingPlanRef.current) {
       fetchingPlanRef.current = true;
       setGamePlanStatus('loading');
@@ -328,7 +387,7 @@ export default function App() {
       if (playerChamp) {
         const payload = {
           playerChampion: playerChamp.name,
-          playerRole: localPlayer.assignedPosition || currentRole,
+          playerRole: currentRole, // Always use the mapped role, not the raw LCU string
           allies: newAllies.filter(Boolean).map(c => ({ name: c!.name, role: remainingAllyRoles[newAllies.indexOf(c)] })),
           enemies: newEnemies.filter(Boolean).map(c => ({ name: c!.name, role: ALL_ROLES[newEnemies.indexOf(c)] })),
           alliedBans: lcuBans.filter((_, i) => i < 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean),
@@ -337,11 +396,27 @@ export default function App() {
 
         axios.post(`${API_URL}/api/gameplan`, payload)
           .then(res => {
-            setGamePlan(res.data);
-            setGamePlanStatus('ready');
+            if (res.data?.ok) {
+              setGamePlan(res.data.data);
+              setGamePlanStatus('ready');
+            } else {
+              console.error('Game Plan: backend returned ok=false', res.data?.error);
+              setGamePlanStatus('error');
+              setGamePlanError(res.data?.error || { userMessage: 'An unexpected error occurred.' });
+            }
           })
           .catch(err => {
-            console.error("Game Plan Error", err);
+            console.error('Game Plan Error', err);
+            const backendError = err.response?.data?.error;
+            if (backendError && typeof backendError === 'object') {
+              setGamePlanError(backendError);
+            } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+              setGamePlanError({ code: 'NETWORK_TIMEOUT', userMessage: 'The request to the AI service took too long and timed out.', retryable: true });
+            } else if (!err.response) {
+              setGamePlanError({ code: 'NETWORK_UNREACHABLE', userMessage: 'Could not reach the backend server.', retryable: true });
+            } else {
+              setGamePlanError({ code: 'INTERNAL_UNKNOWN', userMessage: err.message || 'An unexpected error occurred.' });
+            }
             setGamePlanStatus('error');
           });
       } else {
@@ -391,6 +466,7 @@ export default function App() {
   };
 
   const fetchRecommendation = async () => {
+    if (!role) return;
     setLoading(true);
     setRecommendation(null);
     setHoveredChamp(null);
@@ -439,6 +515,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!role) return;
     const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}-${bans.join()}-${useAffinity ? gameName + tagLine + region : 'off'}`;
     if (lcuData && hash !== lastFetchHash.current) {
       const timer = setTimeout(() => {
@@ -558,230 +635,256 @@ export default function App() {
         {/* BOTTOM: COMMAND & DOSSIER */}
         <div className="lower-command">
 
-          <div className="panel context-controls" style={{ display: 'none' }}>
-            <div className="panel-header"><Radar size={16} /> MISSION PARAMETERS</div>
-          </div>
 
           <div className={`panel dossier ${recommendation ? 'active' : ''}`}>
             <div className="panel-header"><Cpu size={16} /> TACTICAL DOSSIER</div>
 
-              {loading ? (
-                <div className="compiling-state">
-                  <div className="scan-line"></div>
-                  <p>COMPILING DRAFT METADATA...</p>
-                </div>
-              ) : !recommendation ? (
-                <div className="idle-state">AWAITING MISSION PARAMETERS</div>
-              ) : recommendation.best ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
-                  <div className="verdict-col">
-                    <div className="verdict-label">PRIMARY DIRECTIVE</div>
-                    <div className={`champ-avatar best ${hoveredChamp ? 'dimmed' : ''}`}>
-                      <img src={activeChamp?.image} alt={activeChamp?.name} />
-                      <div className="overall-score">{activeChamp?.score}</div>
-                    </div>
-                    <h3 className="main-champ-name">{activeChamp?.name?.toUpperCase()}</h3>
-                    <div className="tags">
-                      {activeChamp?.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
-                    </div>
+            {loading ? (
+              <div className="compiling-state">
+                <div className="scan-line"></div>
+                <p>COMPILING DRAFT METADATA...</p>
+              </div>
+            ) : !recommendation ? (
+              <div className="idle-state">AWAITING MISSION PARAMETERS</div>
+            ) : recommendation.best ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
+                <div className="verdict-col">
+                  <div className="verdict-label">PRIMARY DIRECTIVE</div>
+                  <div className={`champ-avatar best ${hoveredChamp ? 'dimmed' : ''}`}>
+                    <img src={activeChamp?.image} alt={activeChamp?.name} />
+                    <div className="overall-score">{activeChamp?.score}</div>
+                  </div>
+                  <h3 className="main-champ-name">{activeChamp?.name?.toUpperCase()}</h3>
+                  <div className="tags">
+                    {activeChamp?.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
+                  </div>
 
-                    {/* Win Rate Gauge */}
-                    {activeChamp?.draftAdvantage && (
-                      <div className="wr-gauge">
-                        <div className="wr-gauge-track">
-                          <div className="wr-zone unfav"></div>
-                          <div className="wr-zone neut"></div>
-                          <div className="wr-zone fav"></div>
+                  {/* Win Rate Gauge */}
+                  {activeChamp?.draftAdvantage && (
+                    <div className="wr-gauge">
+                      <div className="wr-gauge-track">
+                        <div className="wr-zone unfav"></div>
+                        <div className="wr-zone neut"></div>
+                        <div className="wr-zone fav"></div>
+                        <motion.div
+                          className="wr-needle"
+                          initial={{ left: '50%' }}
+                          animate={{ left: `${Math.max(5, Math.min(95, ((activeChamp.estimatedWR - 35) / 30) * 100))}%` }}
+                          transition={{ duration: 0.6, ease: 'easeOut' }}
+                        />
+                      </div>
+                      <div className="wr-label" style={{ color: getAdvantageColor(activeChamp.draftAdvantage) }}>
+                        {getAdvantageLabel(activeChamp.draftAdvantage)}
+                        <span className="wr-pct">{activeChamp.estimatedWR}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lane Matchup Indicator */}
+                  {activeChamp?.laneDifficulty && activeChamp.laneDifficulty !== 'Unknown' && (
+                    <div className="lane-matchup">
+                      <div className="lane-matchup-label">LANE MATCHUP</div>
+                      <div className="lane-matchup-status">
+                        <div className={`status-dot fav ${activeChamp.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
+                        <div className={`status-dot even ${activeChamp.laneDifficulty === 'Even' ? 'active' : ''}`} />
+                        <div className={`status-dot diff ${activeChamp.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
+                        <span className={`status-text ${activeChamp.laneDifficulty.toLowerCase()}`}>
+                          {activeChamp.laneDifficulty.toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reasons */}
+                  {activeChamp?.reasons?.length > 0 && (
+                    <div className="reasons-list">
+                      {activeChamp.reasons.slice(0, 3).map((r: string, i: number) => (
+                        <motion.div
+                          key={r}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 * i }}
+                          className="reason-item"
+                        >
+                          <TrendingUp size={10} />
+                          <span>{r}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Affinity Toggle (Appears under the main champion recommended) */}
+                  <div className="affinity-toggle" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '1px', color: useAffinity ? 'var(--text-main)' : 'var(--text-secondary)' }}>
+                      {useAffinity ? 'MASTERY INFLUENCE: ON' : 'MASTERY INFLUENCE: OFF'}
+                    </span>
+                    <div
+                      className={`toggle-switch ${useAffinity ? 'active' : ''}`}
+                      onClick={() => setUseAffinity(!useAffinity)}
+                      style={{
+                        width: '32px', height: '16px', borderRadius: '8px', cursor: 'pointer',
+                        backgroundColor: useAffinity ? 'var(--accent-cyan)' : 'var(--bg-darker)',
+                        border: '1px solid var(--border-color)', position: 'relative', transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{
+                        width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--text-main)',
+                        position: 'absolute', top: '1px', left: useAffinity ? '17px' : '2px', transition: 'all 0.2s'
+                      }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="evidence-col">
+                  <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
+                  {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label, desc }) => {
+                    const score = activeChamp.scores[key] || 0;
+                    const barWidth = Math.max(0, Math.min(100, score));
+
+                    return (
+                      <div className="data-row" key={key}>
+                        <div className="data-label">
+                          {label}
+                          <div className="info-icon">
+                            ⓘ
+                            <div className="info-tooltip">{desc}</div>
+                          </div>
+                        </div>
+                        <div className="data-bar-bg">
                           <motion.div
-                            className="wr-needle"
-                            initial={{ left: '50%' }}
-                            animate={{ left: `${Math.max(5, Math.min(95, ((activeChamp.estimatedWR - 35) / 30) * 100))}%` }}
-                            transition={{ duration: 0.6, ease: 'easeOut' }}
+                            key={`${activeChamp.id}-${key}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${barWidth}%` }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
+                            className="data-bar-fill"
+                            style={{ backgroundColor: getScoreColor(barWidth) }}
                           />
                         </div>
-                        <div className="wr-label" style={{ color: getAdvantageColor(activeChamp.draftAdvantage) }}>
-                          {getAdvantageLabel(activeChamp.draftAdvantage)}
-                          <span className="wr-pct">{activeChamp.estimatedWR}%</span>
-                        </div>
+                        <div className="data-value">{score}</div>
                       </div>
-                    )}
+                    )
+                  })}
 
-                    {/* Lane Matchup Indicator */}
-                    {activeChamp?.laneDifficulty && activeChamp.laneDifficulty !== 'Unknown' && (
-                      <div className="lane-matchup">
-                        <div className="lane-matchup-label">LANE MATCHUP</div>
-                        <div className="lane-matchup-status">
-                          <div className={`status-dot fav ${activeChamp.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
-                          <div className={`status-dot even ${activeChamp.laneDifficulty === 'Even' ? 'active' : ''}`} />
-                          <div className={`status-dot diff ${activeChamp.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
-                          <span className={`status-text ${activeChamp.laneDifficulty.toLowerCase()}`}>
-                            {activeChamp.laneDifficulty.toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Reasons */}
-                    {activeChamp?.reasons?.length > 0 && (
-                      <div className="reasons-list">
-                        {activeChamp.reasons.slice(0, 3).map((r: string, i: number) => (
+                  {recommendation.alternatives?.length > 0 && (
+                    <div className="alternatives mt-4">
+                      <div className="evidence-label">VIABLE ALTERNATIVES</div>
+                      <div className="alt-list">
+                        {recommendation.alternatives.map((alt: any, idx: number) => (
                           <motion.div
-                            key={r}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.1 * i }}
-                            className="reason-item"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 + idx * 0.1 }}
+                            key={alt.id}
+                            className={`alt-card ${hoveredChamp?.id === alt.id ? 'alt-active' : ''}`}
+                            onMouseEnter={() => setHoveredChamp(alt)}
+                            onMouseLeave={() => setHoveredChamp(null)}
                           >
-                            <TrendingUp size={10} />
-                            <span>{r}</span>
+                            <img src={alt.image} alt={alt.name} />
+                            <div className="alt-name">{alt.name.toUpperCase()}</div>
+                            <div className="alt-score">{alt.score}</div>
                           </motion.div>
                         ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="evidence-col">
-                    <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
-                    {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label, desc }) => {
-                      const score = activeChamp.scores[key] || 0;
-                      const barWidth = Math.max(0, Math.min(100, score));
-
-                      return (
-                        <div className="data-row" key={key}>
-                          <div className="data-label">
-                            {label}
-                            <div className="info-icon">
-                              ⓘ
-                              <div className="info-tooltip">{desc}</div>
-                            </div>
-                          </div>
-                          <div className="data-bar-bg">
-                            <motion.div
-                              key={`${activeChamp.id}-${key}`}
-                              initial={{ width: 0 }}
-                              animate={{ width: `${barWidth}%` }}
-                              transition={{ duration: 0.5, ease: 'easeOut' }}
-                              className="data-bar-fill"
-                              style={{ backgroundColor: getScoreColor(barWidth) }}
-                            />
-                          </div>
-                          <div className="data-value">{score}</div>
-                        </div>
-                      )
-                    })}
-
-                    {recommendation.alternatives?.length > 0 && (
-                      <div className="alternatives mt-4">
-                        <div className="evidence-label">VIABLE ALTERNATIVES</div>
-                        <div className="alt-list">
-                          {recommendation.alternatives.map((alt: any, idx: number) => (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.2 + idx * 0.1 }}
-                              key={alt.id}
-                              className={`alt-card ${hoveredChamp?.id === alt.id ? 'alt-active' : ''}`}
-                              onMouseEnter={() => setHoveredChamp(alt)}
-                              onMouseLeave={() => setHoveredChamp(null)}
-                            >
-                              <img src={alt.image} alt={alt.name} />
-                              <div className="alt-name">{alt.name.toUpperCase()}</div>
-                              <div className="alt-score">{alt.score}</div>
-                            </motion.div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ) : (
-                <div className="idle-state error">NO VIABLE CHAMPIONS FOUND IN PROTOCOL</div>
-              )}
-            </div>
-          </div>
-
-          {/* PRE-GAME STRATEGIC BRIEF */}
-          {(gamePlanStatus !== 'idle') && (
-            <div className="panel gameplan-panel">
-              <div className="panel-header"><TrendingUp size={16} /> PRE-GAME STRATEGIC BRIEF</div>
-              {gamePlanStatus === 'loading' ? (
-                <div className="compiling-state">
-                  <div className="scan-line"></div>
-                  <p>GENERATING WIN CONDITION AND STRATEGIC PLAYBOOK...</p>
-                </div>
-              ) : gamePlanStatus === 'ready' && gamePlan ? (
-                <div className="gameplan-content">
-                  <h2 className="mission-statement">MISSION: {gamePlan.mission}</h2>
-                  <div className="comp-identity">{gamePlan.compIdentity}</div>
-
-                  <div className="gameplan-grid mt-4">
-                    <div className="plan-col">
-                      <div className="plan-section">
-                        <h4>LANE PLAN</h4>
-                        <div className="plan-item"><span className="plan-label">Lvl 1-3:</span> {gamePlan.lanePlan?.levelOneToThree?.waveManagement}. {gamePlan.lanePlan?.levelOneToThree?.bestPlay}</div>
-                        {gamePlan.lanePlan?.levelOneToThree?.warnings?.length > 0 && (
-                          <div className="plan-item"><span className="plan-warning">WARNING:</span> {gamePlan.lanePlan.levelOneToThree.warnings.join(' ')}</div>
-                        )}
-
-                        <div className="plan-item"><span className="plan-label">Lvl 3-6:</span> {gamePlan.lanePlan?.levelThreeToSix?.waveManagement}. {gamePlan.lanePlan?.levelThreeToSix?.bestPlay}</div>
-
-                        {gamePlan.lanePlan?.powerSpikes?.map((sp: any, i: number) => (
-                          <div key={i} className="plan-item"><span className="plan-label">SPIKE: {sp.spike}</span> - {sp.whatToDo}</div>
-                        ))}
-                      </div>
-
-                      <div className="plan-section mt-4">
-                        <h4>JUNGLE TRACKING</h4>
-                        <div className="plan-item"><span className="plan-label">Start / Path:</span> {gamePlan.jungleTracking?.likelyStart} &rarr; {gamePlan.jungleTracking?.path}</div>
-                        <div className="plan-item"><span className="plan-label">First Gank:</span> {gamePlan.jungleTracking?.firstGankTiming}</div>
-                        <div className="plan-item"><span className="plan-label">How to play:</span> {gamePlan.jungleTracking?.howToPlay}</div>
-                      </div>
-                    </div>
-
-                    <div className="plan-col">
-                      <div className="plan-section">
-                        <h4>MACRO & WIN CONDITION</h4>
-                        <div className="plan-item"><span className="plan-label">Mid Game:</span> {gamePlan.midGamePlan?.bestPlay}. {gamePlan.midGamePlan?.why}</div>
-                        <div className="plan-item"><span className="plan-label">Win Condition:</span> {gamePlan.winCondition}</div>
-                        <div className="plan-item">
-                          <span className="plan-label">Priority Targets:</span>
-                          {gamePlan.priorityTargets?.map((t: any) => `${t.target} (${t.reason})`).join(', ')}
-                        </div>
-                      </div>
-
-                      <div className="plan-section mt-4">
-                        <h4>BUILD PATH</h4>
-                        <div className="plan-item"><span className="plan-label">Start:</span> {gamePlan.build?.startItems?.join(', ')}</div>
-                        <div className="plan-item"><span className="plan-label">1st Recall (@{gamePlan.build?.firstRecall?.timing}):</span> {gamePlan.build?.firstRecall?.items?.join(', ')} (Need {gamePlan.build?.firstRecall?.minGold})</div>
-                        <div className="plan-item"><span className="plan-label">Rush:</span> {gamePlan.build?.firstItem?.name} ({gamePlan.build?.firstItem?.why})</div>
-                        <div className="plan-item"><span className="plan-label">Core:</span> {gamePlan.build?.coreItems?.map((c: any) => c.name).join(', ')}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {(gamePlan.warnings?.length > 0 || gamePlan.microTips?.length > 0) && (
-                    <div className="gameplan-grid">
-                      <div className="plan-section">
-                        <h4>WARNINGS</h4>
-                        {gamePlan.warnings?.map((w: string, idx: number) => <div key={idx} className="plan-item"><span className="plan-warning">!</span> {w}</div>)}
-                      </div>
-                      <div className="plan-section">
-                        <h4>MICRO TIPS</h4>
-                        {gamePlan.microTips?.map((t: string, idx: number) => <div key={idx} className="plan-item">• {t}</div>)}
                       </div>
                     </div>
                   )}
                 </div>
-              ) : gamePlanStatus === 'error' ? (
-                <div className="idle-state error">
-                  FAILED TO GENERATE STRATEGIC BRIEF<br />
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ensure GEMINI_API_KEY is available and the response is not being blocked.</span>
+              </motion.div>
+            ) : (
+              <div className="idle-state error">NO VIABLE CHAMPIONS FOUND IN PROTOCOL</div>
+            )}
+          </div>
+        </div>
+
+        {/* PRE-GAME STRATEGIC BRIEF */}
+        {(gamePlanStatus !== 'idle') && (
+          <div className="panel gameplan-panel">
+            <div className="panel-header"><TrendingUp size={16} /> PRE-GAME STRATEGIC BRIEF</div>
+            {gamePlanStatus === 'loading' ? (
+              <div className="compiling-state">
+                <div className="scan-line"></div>
+                <p>GENERATING WIN CONDITION AND STRATEGIC PLAYBOOK...</p>
+              </div>
+            ) : gamePlanStatus === 'ready' && gamePlan ? (
+              <div className="gameplan-content">
+                <h2 className="mission-statement">MISSION: {gamePlan.mission}</h2>
+                <div className="comp-identity">{gamePlan.compIdentity}</div>
+
+                <div className="gameplan-grid mt-4">
+                  <div className="plan-col">
+                    <div className="plan-section">
+                      <h4>LANE PLAN</h4>
+                      <div className="plan-item"><span className="plan-label">Lvl 1-3:</span> {gamePlan.lanePlan?.levelOneToThree?.waveManagement}. {gamePlan.lanePlan?.levelOneToThree?.bestPlay}</div>
+                      {gamePlan.lanePlan?.levelOneToThree?.warnings?.length > 0 && (
+                        <div className="plan-item"><span className="plan-warning">WARNING:</span> {gamePlan.lanePlan.levelOneToThree.warnings.join(' ')}</div>
+                      )}
+
+                      <div className="plan-item"><span className="plan-label">Lvl 3-6:</span> {gamePlan.lanePlan?.levelThreeToSix?.waveManagement}. {gamePlan.lanePlan?.levelThreeToSix?.bestPlay}</div>
+
+                      {gamePlan.lanePlan?.powerSpikes?.map((sp: any, i: number) => (
+                        <div key={i} className="plan-item"><span className="plan-label">SPIKE: {sp.spike}</span> - {sp.whatToDo}</div>
+                      ))}
+                    </div>
+
+                    <div className="plan-section mt-4">
+                      <h4>JUNGLE TRACKING</h4>
+                      <div className="plan-item"><span className="plan-label">Start / Path:</span> {gamePlan.jungleTracking?.likelyStart} &rarr; {gamePlan.jungleTracking?.path}</div>
+                      <div className="plan-item"><span className="plan-label">First Gank:</span> {gamePlan.jungleTracking?.firstGankTiming}</div>
+                      <div className="plan-item"><span className="plan-label">How to play:</span> {gamePlan.jungleTracking?.howToPlay}</div>
+                    </div>
+                  </div>
+
+                  <div className="plan-col">
+                    <div className="plan-section">
+                      <h4>MACRO & WIN CONDITION</h4>
+                      <div className="plan-item"><span className="plan-label">Mid Game:</span> {gamePlan.midGamePlan?.bestPlay}. {gamePlan.midGamePlan?.why}</div>
+                      <div className="plan-item"><span className="plan-label">Win Condition:</span> {gamePlan.winCondition}</div>
+                      <div className="plan-item">
+                        <span className="plan-label">Priority Targets:</span>
+                        {gamePlan.priorityTargets?.map((t: any) => `${t.target} (${t.reason})`).join(', ')}
+                      </div>
+                    </div>
+
+                    <div className="plan-section mt-4">
+                      <h4>BUILD PATH</h4>
+                      <div className="plan-item"><span className="plan-label">Start:</span> {gamePlan.build?.startItems?.join(', ')}</div>
+                      <div className="plan-item"><span className="plan-label">1st Recall (@{gamePlan.build?.firstRecall?.timing}):</span> {gamePlan.build?.firstRecall?.items?.join(', ')} (Need {gamePlan.build?.firstRecall?.minGold})</div>
+                      <div className="plan-item"><span className="plan-label">Rush:</span> {gamePlan.build?.firstItem?.name} ({gamePlan.build?.firstItem?.why})</div>
+                      <div className="plan-item"><span className="plan-label">Core:</span> {gamePlan.build?.coreItems?.map((c: any) => c.name).join(', ')}</div>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="idle-state error">AWAITING LOCK-IN</div>
-              )}
-            </div>
-          )}
+
+                {(gamePlan.warnings?.length > 0 || gamePlan.microTips?.length > 0) && (
+                  <div className="gameplan-grid">
+                    <div className="plan-section">
+                      <h4>WARNINGS</h4>
+                      {gamePlan.warnings?.map((w: string, idx: number) => <div key={idx} className="plan-item"><span className="plan-warning">!</span> {w}</div>)}
+                    </div>
+                    <div className="plan-section">
+                      <h4>MICRO TIPS</h4>
+                      {gamePlan.microTips?.map((t: string, idx: number) => <div key={idx} className="plan-item">• {t}</div>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : gamePlanStatus === 'error' ? (
+              <div className="idle-state error" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', textAlign: 'center' }}>
+                <span style={{ fontWeight: 800 }}>FAILED TO GENERATE STRATEGIC BRIEF</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '500px', lineHeight: '1.4' }}>
+                  {gamePlanError.userMessage || 'An unexpected error occurred.'}
+                </span>
+                {gamePlanError.retryable && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', opacity: 0.8, marginTop: '0.25rem' }}>This error is transient — the system will retry automatically next lock-in.</span>
+                )}
+                {gamePlanError.requestId && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', opacity: 0.5, fontFamily: 'monospace' }}>REF: {gamePlanError.requestId}</span>
+                )}
+              </div>
+            ) : (
+              <div className="idle-state error">AWAITING LOCK-IN</div>
+            )}
+          </div>
+        )}
 
       </main>
 
