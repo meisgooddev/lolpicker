@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Search, Shield, Crosshair, Radar, Terminal, Activity, Cpu, User, TrendingUp } from 'lucide-react'
+import { X, Search, Shield, Crosshair, Radar, Terminal, Cpu, TrendingUp } from 'lucide-react'
 import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -142,12 +142,15 @@ export default function App() {
   const [recommendation, setRecommendation] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [bans, setBans] = useState<string[]>([]);
+  const [gamePlan, setGamePlan] = useState<any>(null);
+  const [gamePlanStatus, setGamePlanStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const fetchingPlanRef = useRef(false);
 
   // Summoner identity for player affinity
   const [gameName, setGameName] = useState('');
   const [tagLine, setTagLine] = useState('');
-  const [region, setRegion] = useState('euw');
-  const [useAffinity, setUseAffinity] = useState(true);
+  const [region] = useState('euw'); // setRegion removed since UI is hidden
+  const [useAffinity] = useState(true); // setUseAffinity removed since UI is hidden
 
   // Auto-fetch summoner data via ipc on load
   useEffect(() => {
@@ -155,17 +158,17 @@ export default function App() {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.invoke('get-lcu-summoner').then((data: any) => {
         if (data && data.gameName && data.tagLine) {
-           setGameName(data.gameName);
-           setTagLine(data.tagLine);
+          setGameName(data.gameName);
+          setTagLine(data.tagLine);
         } else if (data && data.displayName) {
-           const parts = data.displayName.split('#');
-           if (parts.length > 1) {
-              setGameName(parts[0]);
-              setTagLine(parts[1]);
-           } else {
-              setGameName(data.displayName);
-              setTagLine('EUW');
-           }
+          const parts = data.displayName.split('#');
+          if (parts.length > 1) {
+            setGameName(parts[0]);
+            setTagLine(parts[1]);
+          } else {
+            setGameName(data.displayName);
+            setTagLine('EUW');
+          }
         }
       }).catch((e: any) => console.warn("Failed to get LCU summoner", e));
     }
@@ -284,20 +287,68 @@ export default function App() {
 
     const newEnemies = assignEnemiesToRoles(lockedEnemies);
 
-    const lcuBans: string[] = [];
+    const lcuBansSet = new Set<string>();
+
+    if (lcuData.actions) {
+      const flatActions = lcuData.actions.flat();
+      flatActions.forEach((a: any) => {
+        if (a.type === 'ban' && a.championId > 0 && a.completed) {
+          const champ = championList.find(c => c.key === a.championId);
+          if (champ) lcuBansSet.add(champ.id);
+        }
+      });
+    }
+
     if (lcuData.bans) {
       const allBans = [...(lcuData.bans.myTeamBans || []), ...(lcuData.bans.theirTeamBans || [])];
       allBans.forEach((bid: number) => {
         if (bid > 0) {
           const champ = championList.find(c => c.key === bid);
-          if (champ) lcuBans.push(champ.id);
+          if (champ) lcuBansSet.add(champ.id);
         }
       });
     }
 
+    const lcuBans = Array.from(lcuBansSet);
+
     setBans(prev => JSON.stringify(prev) === JSON.stringify(lcuBans) ? prev : lcuBans);
     setAllies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newAllies.map(c => c?.id)) ? prev : newAllies);
     setEnemies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newEnemies.map(c => c?.id)) ? prev : newEnemies);
+
+    // Lock-in detection
+    const flatActions = lcuData.actions ? lcuData.actions.flat() : [];
+    const myPickAction = flatActions.find((a: any) => a.actorCellId === lcuData.localPlayerCellId && a.type === 'pick');
+    const isPlayerLockedIn = myPickAction ? myPickAction.completed : (localPlayer && localPlayer.championId > 0 && lcuData.timer.phase !== 'PLANNING');
+
+    if (isPlayerLockedIn && localPlayer && localPlayer.championId > 0 && gamePlanStatus === 'idle' && !fetchingPlanRef.current) {
+      fetchingPlanRef.current = true;
+      setGamePlanStatus('loading');
+
+      const playerChamp = championList.find(c => c.key === localPlayer.championId);
+      if (playerChamp) {
+        const payload = {
+          playerChampion: playerChamp.name,
+          playerRole: localPlayer.assignedPosition || currentRole,
+          allies: newAllies.filter(Boolean).map(c => ({ name: c!.name, role: remainingAllyRoles[newAllies.indexOf(c)] })),
+          enemies: newEnemies.filter(Boolean).map(c => ({ name: c!.name, role: ALL_ROLES[newEnemies.indexOf(c)] })),
+          alliedBans: lcuBans.filter((_, i) => i < 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean),
+          enemyBans: lcuBans.filter((_, i) => i >= 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean)
+        };
+
+        axios.post(`${API_URL}/api/gameplan`, payload)
+          .then(res => {
+            setGamePlan(res.data);
+            setGamePlanStatus('ready');
+          })
+          .catch(err => {
+            console.error("Game Plan Error", err);
+            setGamePlanStatus('error');
+          });
+      } else {
+        setGamePlanStatus('error');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lcuData, championList]);
 
   useEffect(() => {
@@ -388,7 +439,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}-${bans.join()}-${useAffinity ? gameName+tagLine+region : 'off'}`;
+    const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}-${bans.join()}-${useAffinity ? gameName + tagLine + region : 'off'}`;
     if (lcuData && hash !== lastFetchHash.current) {
       const timer = setTimeout(() => {
         lastFetchHash.current = hash;
@@ -473,9 +524,9 @@ export default function App() {
                 <div className="bans-header"><X size={12} /> BANNED</div>
                 <div className="bans-list">
                   {bans.map((bid, idx) => {
-                     const champ = championList.find(c => c.id === bid);
-                     if (!champ) return null;
-                     return <img key={idx} src={champ.image} alt={champ.name} title={champ.name} />;
+                    const champ = championList.find(c => c.id === bid);
+                    if (!champ) return null;
+                    return <img key={idx} src={champ.image} alt={champ.name} title={champ.name} />;
                   })}
                 </div>
               </div>
@@ -507,221 +558,231 @@ export default function App() {
         {/* BOTTOM: COMMAND & DOSSIER */}
         <div className="lower-command">
 
-          <div className="panel context-controls">
+          <div className="panel context-controls" style={{ display: 'none' }}>
             <div className="panel-header"><Radar size={16} /> MISSION PARAMETERS</div>
-
-            <div className="control-group">
-              <label>Draft Phase / Pick #</label>
-              <div className="position-display" style={{ marginTop: '0.5rem' }}>
-                {String(Math.min(10, allies.filter(a => a).length + enemies.filter(e => e).length + 1)).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="control-group">
-              <label>Map Side</label>
-              <div className="toggle-group">
-                <button className={`side-btn blue ${side === 'blue' ? 'active' : ''}`} onClick={() => setSide('blue')}>BLUE</button>
-                <button className={`side-btn red ${side === 'red' ? 'active' : ''}`} onClick={() => setSide('red')}>RED</button>
-              </div>
-            </div>
-
-            <div className="control-group">
-              <label>Target Assignment</label>
-              <div className="role-selector">
-                {ALL_ROLES.map(r => (
-                  <button key={r} className={`role-btn ${role === r ? 'active' : ''}`} onClick={() => setRole(r)}>{r}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Summoner Identity Section */}
-            <div className="control-group summoner-group">
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span><User size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Summoner Affinity</span>
-                <input 
-                  type="checkbox" 
-                  checked={useAffinity} 
-                  onChange={e => setUseAffinity(e.target.checked)} 
-                  style={{ cursor: 'pointer' }}
-                />
-              </label>
-              {useAffinity && (
-                <>
-                  <div className="summoner-inputs" style={{ marginTop: '0.5rem' }}>
-                    <input
-                      type="text"
-                      className="summoner-input"
-                      placeholder="Game Name"
-                      value={gameName}
-                      onChange={e => setGameName(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="summoner-input tag-input"
-                      placeholder="Tag"
-                      value={tagLine}
-                      onChange={e => setTagLine(e.target.value)}
-                    />
-                  </div>
-                  <select className="region-select" value={region} onChange={e => setRegion(e.target.value)}>
-                    <option value="euw">EUW</option>
-                    <option value="eune">EUNE</option>
-                    <option value="na">NA</option>
-                    <option value="kr">KR</option>
-                    <option value="br">BR</option>
-                    <option value="jp">JP</option>
-                    <option value="oce">OCE</option>
-                    <option value="lan">LAN</option>
-                    <option value="las">LAS</option>
-                    <option value="tr">TR</option>
-                    <option value="ru">RU</option>
-                  </select>
-                </>
-              )}
-            </div>
-
-            <button className="analyze-btn mt-2" onClick={fetchRecommendation}>
-              {loading ? <><Activity className="spin" size={20} /> ANALYZING...</> : 'INITIALIZE HUD'}
-            </button>
           </div>
 
           <div className={`panel dossier ${recommendation ? 'active' : ''}`}>
             <div className="panel-header"><Cpu size={16} /> TACTICAL DOSSIER</div>
 
-            {loading ? (
-              <div className="compiling-state">
-                <div className="scan-line"></div>
-                <p>COMPILING DRAFT METADATA...</p>
-              </div>
-            ) : !recommendation ? (
-              <div className="idle-state">AWAITING MISSION PARAMETERS</div>
-            ) : recommendation.best ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
-                <div className="verdict-col">
-                  <div className="verdict-label">PRIMARY DIRECTIVE</div>
-                  <div className={`champ-avatar best ${hoveredChamp ? 'dimmed' : ''}`}>
-                    <img src={activeChamp?.image} alt={activeChamp?.name} />
-                    <div className="overall-score">{activeChamp?.score}</div>
-                  </div>
-                  <h3 className="main-champ-name">{activeChamp?.name?.toUpperCase()}</h3>
-                  <div className="tags">
-                    {activeChamp?.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
-                  </div>
-
-                  {/* Win Rate Gauge */}
-                  {activeChamp?.draftAdvantage && (
-                    <div className="wr-gauge">
-                      <div className="wr-gauge-track">
-                        <div className="wr-zone unfav"></div>
-                        <div className="wr-zone neut"></div>
-                        <div className="wr-zone fav"></div>
-                        <motion.div
-                          className="wr-needle"
-                          initial={{ left: '50%' }}
-                          animate={{ left: `${Math.max(5, Math.min(95, ((activeChamp.estimatedWR - 35) / 30) * 100))}%` }}
-                          transition={{ duration: 0.6, ease: 'easeOut' }}
-                        />
-                      </div>
-                      <div className="wr-label" style={{ color: getAdvantageColor(activeChamp.draftAdvantage) }}>
-                        {getAdvantageLabel(activeChamp.draftAdvantage)}
-                        <span className="wr-pct">{activeChamp.estimatedWR}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lane Matchup Indicator */}
-                  {activeChamp?.laneDifficulty && activeChamp.laneDifficulty !== 'Unknown' && (
-                    <div className="lane-matchup">
-                      <div className="lane-matchup-label">LANE MATCHUP</div>
-                      <div className="lane-matchup-status">
-                        <div className={`status-dot fav ${activeChamp.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
-                        <div className={`status-dot even ${activeChamp.laneDifficulty === 'Even' ? 'active' : ''}`} />
-                        <div className={`status-dot diff ${activeChamp.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
-                        <span className={`status-text ${activeChamp.laneDifficulty.toLowerCase()}`}>
-                          {activeChamp.laneDifficulty.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Reasons */}
-                  {activeChamp?.reasons?.length > 0 && (
-                    <div className="reasons-list">
-                      {activeChamp.reasons.slice(0, 3).map((r: string, i: number) => (
-                        <motion.div
-                          key={r}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 * i }}
-                          className="reason-item"
-                        >
-                          <TrendingUp size={10} />
-                          <span>{r}</span>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
+              {loading ? (
+                <div className="compiling-state">
+                  <div className="scan-line"></div>
+                  <p>COMPILING DRAFT METADATA...</p>
                 </div>
+              ) : !recommendation ? (
+                <div className="idle-state">AWAITING MISSION PARAMETERS</div>
+              ) : recommendation.best ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
+                  <div className="verdict-col">
+                    <div className="verdict-label">PRIMARY DIRECTIVE</div>
+                    <div className={`champ-avatar best ${hoveredChamp ? 'dimmed' : ''}`}>
+                      <img src={activeChamp?.image} alt={activeChamp?.name} />
+                      <div className="overall-score">{activeChamp?.score}</div>
+                    </div>
+                    <h3 className="main-champ-name">{activeChamp?.name?.toUpperCase()}</h3>
+                    <div className="tags">
+                      {activeChamp?.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
+                    </div>
 
-                <div className="evidence-col">
-                  <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
-                  {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label, desc }) => {
-                    const score = activeChamp.scores[key] || 0;
-                    const barWidth = Math.max(0, Math.min(100, score));
-
-                    return (
-                      <div className="data-row" key={key}>
-                        <div className="data-label">
-                          {label}
-                          <div className="info-icon">
-                            ⓘ
-                            <div className="info-tooltip">{desc}</div>
-                          </div>
-                        </div>
-                        <div className="data-bar-bg">
+                    {/* Win Rate Gauge */}
+                    {activeChamp?.draftAdvantage && (
+                      <div className="wr-gauge">
+                        <div className="wr-gauge-track">
+                          <div className="wr-zone unfav"></div>
+                          <div className="wr-zone neut"></div>
+                          <div className="wr-zone fav"></div>
                           <motion.div
-                            key={`${activeChamp.id}-${key}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${barWidth}%` }}
-                            transition={{ duration: 0.5, ease: 'easeOut' }}
-                            className="data-bar-fill"
-                            style={{ backgroundColor: getScoreColor(barWidth) }}
+                            className="wr-needle"
+                            initial={{ left: '50%' }}
+                            animate={{ left: `${Math.max(5, Math.min(95, ((activeChamp.estimatedWR - 35) / 30) * 100))}%` }}
+                            transition={{ duration: 0.6, ease: 'easeOut' }}
                           />
                         </div>
-                        <div className="data-value">{score}</div>
+                        <div className="wr-label" style={{ color: getAdvantageColor(activeChamp.draftAdvantage) }}>
+                          {getAdvantageLabel(activeChamp.draftAdvantage)}
+                          <span className="wr-pct">{activeChamp.estimatedWR}%</span>
+                        </div>
                       </div>
-                    )
-                  })}
+                    )}
 
-                  {recommendation.alternatives?.length > 0 && (
-                    <div className="alternatives mt-4">
-                      <div className="evidence-label">VIABLE ALTERNATIVES</div>
-                      <div className="alt-list">
-                        {recommendation.alternatives.map((alt: any, idx: number) => (
+                    {/* Lane Matchup Indicator */}
+                    {activeChamp?.laneDifficulty && activeChamp.laneDifficulty !== 'Unknown' && (
+                      <div className="lane-matchup">
+                        <div className="lane-matchup-label">LANE MATCHUP</div>
+                        <div className="lane-matchup-status">
+                          <div className={`status-dot fav ${activeChamp.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
+                          <div className={`status-dot even ${activeChamp.laneDifficulty === 'Even' ? 'active' : ''}`} />
+                          <div className={`status-dot diff ${activeChamp.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
+                          <span className={`status-text ${activeChamp.laneDifficulty.toLowerCase()}`}>
+                            {activeChamp.laneDifficulty.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Reasons */}
+                    {activeChamp?.reasons?.length > 0 && (
+                      <div className="reasons-list">
+                        {activeChamp.reasons.slice(0, 3).map((r: string, i: number) => (
                           <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 + idx * 0.1 }}
-                            key={alt.id}
-                            className={`alt-card ${hoveredChamp?.id === alt.id ? 'alt-active' : ''}`}
-                            onMouseEnter={() => setHoveredChamp(alt)}
-                            onMouseLeave={() => setHoveredChamp(null)}
+                            key={r}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 * i }}
+                            className="reason-item"
                           >
-                            <img src={alt.image} alt={alt.name} />
-                            <div className="alt-name">{alt.name.toUpperCase()}</div>
-                            <div className="alt-score">{alt.score}</div>
+                            <TrendingUp size={10} />
+                            <span>{r}</span>
                           </motion.div>
                         ))}
                       </div>
+                    )}
+                  </div>
+
+                  <div className="evidence-col">
+                    <div className="evidence-label">ANALYTICS BREAKDOWN {hoveredChamp ? `— ${hoveredChamp.name.toUpperCase()}` : ''}</div>
+                    {activeChamp?.scores && SCORE_DIMENSIONS.map(({ key, label, desc }) => {
+                      const score = activeChamp.scores[key] || 0;
+                      const barWidth = Math.max(0, Math.min(100, score));
+
+                      return (
+                        <div className="data-row" key={key}>
+                          <div className="data-label">
+                            {label}
+                            <div className="info-icon">
+                              ⓘ
+                              <div className="info-tooltip">{desc}</div>
+                            </div>
+                          </div>
+                          <div className="data-bar-bg">
+                            <motion.div
+                              key={`${activeChamp.id}-${key}`}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${barWidth}%` }}
+                              transition={{ duration: 0.5, ease: 'easeOut' }}
+                              className="data-bar-fill"
+                              style={{ backgroundColor: getScoreColor(barWidth) }}
+                            />
+                          </div>
+                          <div className="data-value">{score}</div>
+                        </div>
+                      )
+                    })}
+
+                    {recommendation.alternatives?.length > 0 && (
+                      <div className="alternatives mt-4">
+                        <div className="evidence-label">VIABLE ALTERNATIVES</div>
+                        <div className="alt-list">
+                          {recommendation.alternatives.map((alt: any, idx: number) => (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.2 + idx * 0.1 }}
+                              key={alt.id}
+                              className={`alt-card ${hoveredChamp?.id === alt.id ? 'alt-active' : ''}`}
+                              onMouseEnter={() => setHoveredChamp(alt)}
+                              onMouseLeave={() => setHoveredChamp(null)}
+                            >
+                              <img src={alt.image} alt={alt.name} />
+                              <div className="alt-name">{alt.name.toUpperCase()}</div>
+                              <div className="alt-score">{alt.score}</div>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="idle-state error">NO VIABLE CHAMPIONS FOUND IN PROTOCOL</div>
+              )}
+            </div>
+          </div>
+
+          {/* PRE-GAME STRATEGIC BRIEF */}
+          {(gamePlanStatus !== 'idle') && (
+            <div className="panel gameplan-panel">
+              <div className="panel-header"><TrendingUp size={16} /> PRE-GAME STRATEGIC BRIEF</div>
+              {gamePlanStatus === 'loading' ? (
+                <div className="compiling-state">
+                  <div className="scan-line"></div>
+                  <p>GENERATING WIN CONDITION AND STRATEGIC PLAYBOOK...</p>
+                </div>
+              ) : gamePlanStatus === 'ready' && gamePlan ? (
+                <div className="gameplan-content">
+                  <h2 className="mission-statement">MISSION: {gamePlan.mission}</h2>
+                  <div className="comp-identity">{gamePlan.compIdentity}</div>
+
+                  <div className="gameplan-grid mt-4">
+                    <div className="plan-col">
+                      <div className="plan-section">
+                        <h4>LANE PLAN</h4>
+                        <div className="plan-item"><span className="plan-label">Lvl 1-3:</span> {gamePlan.lanePlan?.levelOneToThree?.waveManagement}. {gamePlan.lanePlan?.levelOneToThree?.bestPlay}</div>
+                        {gamePlan.lanePlan?.levelOneToThree?.warnings?.length > 0 && (
+                          <div className="plan-item"><span className="plan-warning">WARNING:</span> {gamePlan.lanePlan.levelOneToThree.warnings.join(' ')}</div>
+                        )}
+
+                        <div className="plan-item"><span className="plan-label">Lvl 3-6:</span> {gamePlan.lanePlan?.levelThreeToSix?.waveManagement}. {gamePlan.lanePlan?.levelThreeToSix?.bestPlay}</div>
+
+                        {gamePlan.lanePlan?.powerSpikes?.map((sp: any, i: number) => (
+                          <div key={i} className="plan-item"><span className="plan-label">SPIKE: {sp.spike}</span> - {sp.whatToDo}</div>
+                        ))}
+                      </div>
+
+                      <div className="plan-section mt-4">
+                        <h4>JUNGLE TRACKING</h4>
+                        <div className="plan-item"><span className="plan-label">Start / Path:</span> {gamePlan.jungleTracking?.likelyStart} &rarr; {gamePlan.jungleTracking?.path}</div>
+                        <div className="plan-item"><span className="plan-label">First Gank:</span> {gamePlan.jungleTracking?.firstGankTiming}</div>
+                        <div className="plan-item"><span className="plan-label">How to play:</span> {gamePlan.jungleTracking?.howToPlay}</div>
+                      </div>
+                    </div>
+
+                    <div className="plan-col">
+                      <div className="plan-section">
+                        <h4>MACRO & WIN CONDITION</h4>
+                        <div className="plan-item"><span className="plan-label">Mid Game:</span> {gamePlan.midGamePlan?.bestPlay}. {gamePlan.midGamePlan?.why}</div>
+                        <div className="plan-item"><span className="plan-label">Win Condition:</span> {gamePlan.winCondition}</div>
+                        <div className="plan-item">
+                          <span className="plan-label">Priority Targets:</span>
+                          {gamePlan.priorityTargets?.map((t: any) => `${t.target} (${t.reason})`).join(', ')}
+                        </div>
+                      </div>
+
+                      <div className="plan-section mt-4">
+                        <h4>BUILD PATH</h4>
+                        <div className="plan-item"><span className="plan-label">Start:</span> {gamePlan.build?.startItems?.join(', ')}</div>
+                        <div className="plan-item"><span className="plan-label">1st Recall (@{gamePlan.build?.firstRecall?.timing}):</span> {gamePlan.build?.firstRecall?.items?.join(', ')} (Need {gamePlan.build?.firstRecall?.minGold})</div>
+                        <div className="plan-item"><span className="plan-label">Rush:</span> {gamePlan.build?.firstItem?.name} ({gamePlan.build?.firstItem?.why})</div>
+                        <div className="plan-item"><span className="plan-label">Core:</span> {gamePlan.build?.coreItems?.map((c: any) => c.name).join(', ')}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(gamePlan.warnings?.length > 0 || gamePlan.microTips?.length > 0) && (
+                    <div className="gameplan-grid">
+                      <div className="plan-section">
+                        <h4>WARNINGS</h4>
+                        {gamePlan.warnings?.map((w: string, idx: number) => <div key={idx} className="plan-item"><span className="plan-warning">!</span> {w}</div>)}
+                      </div>
+                      <div className="plan-section">
+                        <h4>MICRO TIPS</h4>
+                        {gamePlan.microTips?.map((t: string, idx: number) => <div key={idx} className="plan-item">• {t}</div>)}
+                      </div>
                     </div>
                   )}
                 </div>
-              </motion.div>
-            ) : (
-              <div className="idle-state error">NO VIABLE CHAMPIONS FOUND IN PROTOCOL</div>
-            )}
-          </div>
-        </div>
+              ) : gamePlanStatus === 'error' ? (
+                <div className="idle-state error">
+                  FAILED TO GENERATE STRATEGIC BRIEF<br />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ensure GEMINI_API_KEY is available and the response is not being blocked.</span>
+                </div>
+              ) : (
+                <div className="idle-state error">AWAITING LOCK-IN</div>
+              )}
+            </div>
+          )}
+
       </main>
 
       <AnimatePresence>

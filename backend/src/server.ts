@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { loadChampionData } from './data.js';
 import { getRecommendation } from './recommendation.js';
+import { generateGamePlan } from './gamePlanService.js';
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,29 @@ app.post('/api/recommend', async (req: express.Request, res: express.Response) =
   } catch (e: any) {
     console.error(`[DraftEngine] Validation Error: ${e.message}`);
     res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/gameplan', async (req: express.Request, res: express.Response) => {
+  const { playerChampion, playerRole, playerSummonerSpells, allies, enemies, alliedBans, enemyBans } = req.body;
+  if (!playerChampion || !playerRole || !allies || !enemies) {
+    return res.status(400).json({ error: "Missing required fields: playerChampion, playerRole, allies, enemies" });
+  }
+
+  try {
+    const gamePlan = await generateGamePlan({
+      playerChampion,
+      playerRole,
+      playerSummonerSpells,
+      allies,
+      enemies,
+      alliedBans: alliedBans || [],
+      enemyBans: enemyBans || []
+    });
+    res.json(gamePlan);
+  } catch (e: any) {
+    console.error(`[GamePlan Service] Error: ${e.message}`);
+    res.status(500).json({ error: e.message || "Failed to generate game plan" });
   }
 });
 

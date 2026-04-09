@@ -40,7 +40,7 @@ h3 {
 }
 
 .layout-grid {
-  max-width: 1300px;
+  max-width: 1100px; /* Reduced to keep the desktop app focused and dense */
   margin: 0 auto;
   padding: 1.5rem;
   display: flex;
@@ -295,7 +295,7 @@ h3 {
 /* Panel System */
 .lower-command {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 1fr;
   gap: 1.5rem;
   align-items: start;
 }
@@ -495,12 +495,13 @@ input[type=range] {
 }
 
 .scan-line {
-  width: 200px;
+  width: 100%;
+  max-width: 400px;
   height: 2px;
-  background: var(--accent-cyan);
-  box-shadow: 0 0 10px var(--accent-cyan);
+  background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+  box-shadow: 0 0 15px var(--accent-cyan);
   margin-bottom: 1rem;
-  animation: scan 1s infinite alternate ease-in-out;
+  animation: scan 1.5s infinite alternate ease-in-out;
 }
 
 @keyframes scan {
@@ -518,8 +519,8 @@ input[type=range] {
 /* Dossier Grid */
 .dossier-grid {
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 2rem;
+  grid-template-columns: 240px 1fr;
+  gap: 2.5rem;
   height: 100%;
 }
 
@@ -539,9 +540,9 @@ input[type=range] {
 }
 
 .champ-avatar.best {
-  width: 140px;
-  height: 140px;
-  margin: 0 auto 1rem auto;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 1.5rem auto;
   border: 2px solid var(--accent-cyan);
   position: relative;
   border-radius: 12px;
@@ -559,7 +560,8 @@ input[type=range] {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scale(1.05); /* Slight zoom to hide messy borders of images */
+  transform: scale(1.05);
+  /* Slight zoom to hide messy borders of images */
 }
 
 .overall-score {
@@ -601,6 +603,7 @@ input[type=range] {
   display: flex;
   align-items: center;
   margin-bottom: 0.9rem;
+  max-width: 600px;
 }
 
 .data-label {
@@ -608,22 +611,27 @@ input[type=range] {
   color: var(--text-secondary);
   font-weight: 800;
   text-transform: uppercase;
-  width: 80px;
+  width: 100px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .data-bar-bg {
   flex: 1;
-  height: 4px;
-  background: #1a1d2d;
+  height: 6px;
+  background: #090a0f;
   margin: 0 12px;
-  border-radius: 2px;
+  border-radius: 3px;
+  border: 1px solid #1a1d2d;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
   overflow: hidden;
 }
 
 .data-bar-fill {
   height: 100%;
   background: var(--accent-cyan);
-  box-shadow: 0 0 5px currentColor;
+  box-shadow: 0 0 10px currentColor; /* enhanced glow */
 }
 
 .data-value {
@@ -1093,4 +1101,79 @@ input[type=range] {
 
 .mt-2 {
   margin-top: 1rem;
+}
+
+/* ── Game Plan ──────────────────────────────────────────────────────── */
+.gameplan-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--accent-cyan);
+  box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.05);
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+}
+
+.gameplan-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.mission-statement {
+  font-size: 1.25rem;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
+}
+
+.comp-identity {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  font-style: italic;
+  border-left: 2px solid var(--accent-amber);
+  padding-left: 10px;
+}
+
+.gameplan-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.plan-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-line);
+  padding: 1rem;
+}
+
+.plan-section h4 {
+  font-family: 'Outfit';
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-line);
+  padding-bottom: 6px;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+}
+
+.plan-item {
+  margin-bottom: 0.8rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.plan-label {
+  font-weight: 800;
+  color: var(--accent-cyan);
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.plan-warning {
+  color: var(--score-bad);
+  font-weight: bold;
+}
+
+.build-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
 }

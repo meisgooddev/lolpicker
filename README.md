@@ -1,75 +1,66 @@
-# 🧠 LOLPicker — Smart Draft Assistant for League of Legends
+# 🧠 LOLPicker — Autonomous Tactical Desktop Assistant
+ 
+LOLPicker is an advanced, automated draft assistant and strategic briefer for League of Legends.
 
-LOLPicker is an advanced draft assistant that recommends the optimal champion pick in League of Legends based on real-time draft context.
+Evolving from its origins as a web-based manual drafting tool, LOLPicker is now explicitly a **Native Desktop Application (Electron)**. It securely and automatically syncs with your League of Legends Client (LCU) in real-time, removing the need for any manual input. You simply play the game, and the HUD adapts to you.
 
-It analyzes your team, the enemy team, pick order, and role to generate a competitive-level recommendation using a custom scoring engine. With recent updates, LOLPicker now features **Native Desktop Integration (Electron)** that automatically syncs with the League of Legends Client (LCU) in real-time.
-
----
-
-## 🚀 Live Demo
-
-- 🌐 **Web Frontend:** https://meisgooddev.github.io/lolpicker/ (Manual Draft Entry)
-- 🖥️ **Desktop App:** Build the Electron App locally for Real-Time LCU sync!
-- ⚙️ **Backend:** https://lolpicker.onrender.com  
+Once you lock in your champion, LOLPicker's AI Engine instantly generates a highly personalized, zero-click **Pre-Game Strategic Brief** powered by Google's Gemini LLM.
 
 ---
 
 ## ✨ Features
 
-- 🎯 **Role-based recommendations**
-- 🔄 **Real-Time Client Sync (LCU):** Automatically detects your game draft, hover states, side, and role.
-- 🎲 **Probabilistic Enemy Role Assignment:** A smart backtracking algorithm guesses where enemy locked champions will go.
-- 🧩 **Team composition analysis** (AP/AD, frontline, engage, scaling, etc.)  
-- 🤝 **Synergy detection** with allied champions  
-- ⚔️ **Counter-picking** against enemy champions  
-- 📊 **Meta weighting system**  
-- 🧠 **Transparent scoring breakdown** for each recommendation  
+- 🔄 **Autonomous LCU Sync:** Automatically detects your game draft phase, hover states, side, assigned roles, bans, and locked-in champions in real-time.
+- 🎯 **Algorithmic Draft Recommendations:** Cross-references draft order, team composition, synergy, unplayable counters, and patch meta in its scoring matrix to suggest the mathematically strongest champion.
+- 🎲 **Probabilistic Backtracking:** Smartly guesses where locked-in enemy champions are going to play before the draft finishes.
+- 🤖 **Pre-Game Strategic Brief (Gemini 2.5 Flash):** The moment you lock-in, LOLPicker instantly writes a custom tactile guide for your game:
+  - Macro-level win-conditions for the specific 5v5 compositions on screen.
+  - Granular Lane Matchup plan (Level 1-3, Level 3-6, Spikes).
+  - Algorithmic predictions on enemy Jungle Pathing.
+  - Adaptive sequential Item Build instructions reacting directly to the enemy threats.
+- 🧠 **Transparent Scoring Breakdown:** Every recommendation is backed by readable analytic dimensions.
 
 ---
 
 ## 🏗️ Architecture
 
-LOLPicker uses a multi-service architecture:
+LOLPicker uses a multi-service automated architecture:
 
-Desktop App (Electron + React + Vite + league-connect)  
-↓ *(or Web Frontend via GitHub Pages)*  
-Backend API (Node.js + Express)  
+**Native Desktop App (Electron + React + Vite + league-connect)**  
+↓ *(Zero-Click Sync via LCU)*  
+**Backend API (Node.js + Express) & AI Strategy Engine**  
 ↓  
-Python Microservices (FastAPI)  
+**Google Gemini 2.5 Flash Model APIs & Python Microservices**  
 ↓  
-External Data Sources (Meta statistics, aggregated match data)
+**External Data Sources (Meta statistics, OP.GG Aggregated Match Data)**
 
 ### Services
 
-- **Frontend / Electron** — Web App (React) packaged as a native desktop application. Syncs with local League Client via WebSocket (`/lol-champ-select/v1/session`).
-- **Backend (Node.js)** — Orchestrates scoring and validates draft constraints.
-- **Meta Service (Python)** — Provides patch/role/elo-based champion strength.
-- **OPGG MCP Service (Python)** — Provides matchup and player-related data.
+- **Frontend / Electron** — React application packaged as a native executable. Uses WebSockets and `league-connect` to passively poll `/lol-champ-select/v1/session`.
+- **Backend (Node.js)** — Orchestrates the entire draft scoring logic and handles the LLM Schema validations for the Strategic Briefs.
+- **Microservices (Python)** — Provide localized meta strength indices.
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Frontend & Desktop
-- React
-- TypeScript
-- Vite
-- Framer Motion
-- Desktop: **Electron** + `league-connect`
+### Desktop App (Frontend)
+- React, TypeScript, Vite
+- Framer Motion (Tactical Animations)
+- **Electron** + `league-connect`
 
-### Backend
-- Node.js
-- Express
-- TypeScript
+### Backend Engine
+- Node.js, Express, TypeScript
+- `@google/genai` via Axios (Gemini 2.5-Flash)
 
-### Python Services
-- FastAPI
-- Uvicorn
-- Requests
+### Microservices
+- Python, FastAPI, Uvicorn
 
 ---
 
-## 📦 Local Setup & Building the Desktop App
+## 📦 Setup & Running the Desktop App
+
+Because of its deep LCU integration, LOLPicker runs exclusively as a Desktop application.
 
 ### 1. Clone the repository
 
@@ -78,96 +69,53 @@ git clone https://github.com/meisgooddev/lolpicker.git
 cd lolpicker
 ```
 
-### 2. Run Backend
+### 2. Configure the Engine (Backend)
 
 ```bash
 cd backend
 npm install
+```
+Create a `.env` file in the `backend/` directory:
+```env
+GEMINI_API_KEY=your_gemini_key_here
+PORT=3001
+```
+Run the local engine:
+```bash
 npm run dev
 ```
 
-Backend runs on: `http://localhost:3001`
+### 3. Launch the Tactical HUD (Electron)
 
-### 3. Run Frontend / Electron App
-
-To run as a **Native App (Real-Time HUD with LCU):**
+In a new terminal:
 ```bash
 cd frontend
 npm install
 npm run dev:electron
 ```
-*This will open a standalone window that automatically hooks into your League of Legends Client!*
+*This will open a standalone, transparent tactical overlay that automatically connects to your League of Legends Client!*
 
-**Building the Installers:**
+**Building Installers (Optional):**
 - Compile `.exe` (Windows): `npm run build:win`
 - Compile `.dmg` (macOS): `npm run build:mac`
-- Generic Builder: `npm run build:electron`
-
-*Note: Installers will be generated in `frontend/dist_electron`.*
-
-### 4. Environment Variables
-
-Create `frontend/.env.production`:
-```bash
-VITE_API_URL=http://localhost:3001
-```
+*(Installers are outputted to `frontend/dist_electron`)*
 
 ---
 
-## 🌐 Deployment
+## 🌐 Origins & Web Discontinuation
 
-### Frontend (GitHub Pages)
+*A huge thank you to everyone who used the original Github Pages web-app.* 
 
-The frontend is deployed automatically via GitHub Actions for web users. Live URL: https://meisgooddev.github.io/lolpicker/
-
-### Backend (Render)
-
-The backend is deployed automatically on Render. Live API: https://lolpicker.onrender.com
+To achieve our vision of a true 100% automated, zero-click interactive Tactical HUD that physically knows who you are playing against at all times, the project had to transition completely into a local Electron lifecycle. The legacy web application infrastructure has been retired in favor of this hyper-integrated desktop experience.
 
 ---
 
-## ⚙️ How It Works (The Engine)
+## ⚙️ The Recommendation Metagame
 
-The recommendation engine scores each champion based on multiple weighted factors:
-
-- Draft position (safe blind picks vs counter picks)
-- Team needs (AP/AD balance, engage, peel, scaling)
-- Synergy with allies
-- Counters vs enemies
-- Meta strength
-
-Each champion receives a final score and the system presents the best pick along with viable alternatives.
-
----
-
-## ✨ Feature Improvements (Planned)
-
-- Advanced draft archetype detection
-- User accounts and saved champion pools
-- Performance optimizations and caching
-- Add explanations for each recommendation explicitly in text 
-
----
-
-## 📌 Motivation
-
-This project was built to simulate competitive-level draft decision-making in League of Legends.
-
-The goal was to create a system that doesn't just suggest champions randomly, but actually "thinks" like a high-level player:
-- understanding team composition
-- recognizing win conditions
-- adapting to draft order and enemy picks
-
-It started as a small experimental project and evolved into a full-stack application combining game knowledge, heuristics, LCU architecture, and clean UI design.
-
----
-
-## ⭐ If You Like This Project
-
-- Give it a star on GitHub
-- Share it with friends
-- Use it in your own games
-- Build on top of it
+The engine scores each champion against heavy math constraints:
+- **Draft Position Flexibility:** Avoiding blind-pick vulnerabilities.
+- **Team Geometry:** Balancing AP/AD threat levels and filling absent archetype needs (Engage/Peel/Poke).
+- **Synergy/Counters:** Direct lane advantage measurements.
 
 ---
 
