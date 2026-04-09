@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/api/recommend', async (req: express.Request, res: express.Response) => {
-  const { role, side, allies = [], enemies = [], allyRoles = {}, enemyRoles = {}, gameName, tagLine, region } = req.body;
+  const { role, side, allies = [], enemies = [], allyRoles = {}, enemyRoles = {}, bans = [], gameName, tagLine, region } = req.body;
   try {
     for (const a of allies) {
       if (!allyRoles[a]) throw new Error(`Missing role mapping for ally ID: ${a}`);
@@ -16,7 +16,7 @@ app.post('/api/recommend', async (req: express.Request, res: express.Response) =
     for (const e of enemies) {
       if (!enemyRoles[e]) throw new Error(`Missing role mapping for enemy ID: ${e}`);
     }
-    const recs = await getRecommendation({ role, side, allies, enemies, allyRoles, enemyRoles }, gameName, tagLine, region);
+    const recs = await getRecommendation({ role, side, allies, enemies, allyRoles, enemyRoles, bans }, gameName, tagLine, region);
     res.json(recs);
   } catch (e: any) {
     console.error(`[DraftEngine] Validation Error: ${e.message}`);

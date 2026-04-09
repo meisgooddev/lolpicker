@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
-const { authenticate, createWebSocketConnection } = require('league-connect');
+const { authenticate, createWebSocketConnection, createHttp1Request } = require('league-connect');
 
 let mainWindow;
 let lcuWs;
@@ -24,6 +24,21 @@ async function setupLCU() {
     setTimeout(setupLCU, 5000);
   }
 }
+
+ipcMain.handle('get-lcu-summoner', async () => {
+    try {
+        const credentials = await authenticate();
+        const res = await createHttp1Request({
+            method: 'GET',
+            url: '/lol-summoner/v1/current-summoner'
+        }, credentials);
+        const data = await res.json();
+        return data;
+    } catch (e) {
+        console.warn("Error fetching LCU summoner:", e.message);
+        return null;
+    }
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({

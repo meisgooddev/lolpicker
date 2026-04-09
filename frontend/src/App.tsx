@@ -141,11 +141,35 @@ export default function App() {
   const [enemies, setEnemies] = useState<(ChampInfo | null)[]>([null, null, null, null, null]);
   const [recommendation, setRecommendation] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [bans, setBans] = useState<string[]>([]);
 
   // Summoner identity for player affinity
   const [gameName, setGameName] = useState('');
   const [tagLine, setTagLine] = useState('');
   const [region, setRegion] = useState('euw');
+  const [useAffinity, setUseAffinity] = useState(true);
+
+  // Auto-fetch summoner data via ipc on load
+  useEffect(() => {
+    if ((window as any).require) {
+      const { ipcRenderer } = (window as any).require('electron');
+      ipcRenderer.invoke('get-lcu-summoner').then((data: any) => {
+        if (data && data.gameName && data.tagLine) {
+           setGameName(data.gameName);
+           setTagLine(data.tagLine);
+        } else if (data && data.displayName) {
+           const parts = data.displayName.split('#');
+           if (parts.length > 1) {
+              setGameName(parts[0]);
+              setTagLine(parts[1]);
+           } else {
+              setGameName(data.displayName);
+              setTagLine('EUW');
+           }
+        }
+      }).catch((e: any) => console.warn("Failed to get LCU summoner", e));
+    }
+  }, []);
 
   // Hover state for alternative inspection
   const [hoveredChamp, setHoveredChamp] = useState<any>(null);
@@ -260,6 +284,18 @@ export default function App() {
 
     const newEnemies = assignEnemiesToRoles(lockedEnemies);
 
+    const lcuBans: string[] = [];
+    if (lcuData.bans) {
+      const allBans = [...(lcuData.bans.myTeamBans || []), ...(lcuData.bans.theirTeamBans || [])];
+      allBans.forEach((bid: number) => {
+        if (bid > 0) {
+          const champ = championList.find(c => c.key === bid);
+          if (champ) lcuBans.push(champ.id);
+        }
+      });
+    }
+
+    setBans(prev => JSON.stringify(prev) === JSON.stringify(lcuBans) ? prev : lcuBans);
     setAllies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newAllies.map(c => c?.id)) ? prev : newAllies);
     setEnemies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newEnemies.map(c => c?.id)) ? prev : newEnemies);
   }, [lcuData, championList]);
@@ -329,10 +365,10 @@ export default function App() {
       });
 
       const payload: any = {
-        role, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles
+        role, side, allies: allyIds, enemies: enemyIds, allyRoles, enemyRoles, bans
       };
-      // Only send summoner data if filled in
-      if (gameName.trim() && tagLine.trim()) {
+      // Only send summoner data if affinity is toggled and filled in
+      if (useAffinity && gameName.trim() && tagLine.trim()) {
         payload.gameName = gameName.trim();
         payload.tagLine = tagLine.trim();
         payload.region = region;
@@ -352,7 +388,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}`;
+    const hash = `${role}-${side}-${allies.map(a => a?.id).join()}-${enemies.map(e => e?.id).join()}-${bans.join()}-${useAffinity ? gameName+tagLine+region : 'off'}`;
     if (lcuData && hash !== lastFetchHash.current) {
       const timer = setTimeout(() => {
         lastFetchHash.current = hash;
@@ -360,7 +396,7 @@ export default function App() {
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [role, side, allies, enemies, lcuData]);
+  }, [role, side, allies, enemies, bans, lcuData, useAffinity, gameName, tagLine, region]);
 
   const filteredChamps = Array.isArray(championList)
     ? championList.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
@@ -486,36 +522,48 @@ export default function App() {
 
             {/* Summoner Identity Section */}
             <div className="control-group summoner-group">
-              <label><User size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Summoner (Optional)</label>
-              <div className="summoner-inputs">
-                <input
-                  type="text"
-                  className="summoner-input"
-                  placeholder="Game Name"
-                  value={gameName}
-                  onChange={e => setGameName(e.target.value)}
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span><User size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Summoner Affinity</span>
+                <input 
+                  type="checkbox" 
+                  checked={useAffinity} 
+                  onChange={e => setUseAffinity(e.target.checked)} 
+                  style={{ cursor: 'pointer' }}
                 />
-                <input
-                  type="text"
-                  className="summoner-input tag-input"
-                  placeholder="Tag"
-                  value={tagLine}
-                  onChange={e => setTagLine(e.target.value)}
-                />
-              </div>
-              <select className="region-select" value={region} onChange={e => setRegion(e.target.value)}>
-                <option value="euw">EUW</option>
-                <option value="eune">EUNE</option>
-                <option value="na">NA</option>
-                <option value="kr">KR</option>
-                <option value="br">BR</option>
-                <option value="jp">JP</option>
-                <option value="oce">OCE</option>
-                <option value="lan">LAN</option>
-                <option value="las">LAS</option>
-                <option value="tr">TR</option>
-                <option value="ru">RU</option>
-              </select>
+              </label>
+              {useAffinity && (
+                <>
+                  <div className="summoner-inputs" style={{ marginTop: '0.5rem' }}>
+                    <input
+                      type="text"
+                      className="summoner-input"
+                      placeholder="Game Name"
+                      value={gameName}
+                      onChange={e => setGameName(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="summoner-input tag-input"
+                      placeholder="Tag"
+                      value={tagLine}
+                      onChange={e => setTagLine(e.target.value)}
+                    />
+                  </div>
+                  <select className="region-select" value={region} onChange={e => setRegion(e.target.value)}>
+                    <option value="euw">EUW</option>
+                    <option value="eune">EUNE</option>
+                    <option value="na">NA</option>
+                    <option value="kr">KR</option>
+                    <option value="br">BR</option>
+                    <option value="jp">JP</option>
+                    <option value="oce">OCE</option>
+                    <option value="lan">LAN</option>
+                    <option value="las">LAS</option>
+                    <option value="tr">TR</option>
+                    <option value="ru">RU</option>
+                  </select>
+                </>
+              )}
             </div>
 
             <button className="analyze-btn mt-2" onClick={fetchRecommendation}>

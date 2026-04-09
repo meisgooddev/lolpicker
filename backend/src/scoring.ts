@@ -8,6 +8,7 @@ export type DraftState = {
   enemies: string[];
   allyRoles: Record<string, string>;
   enemyRoles: Record<string, string>;
+  bans?: string[];
 };
 
 export type TeamStats = {

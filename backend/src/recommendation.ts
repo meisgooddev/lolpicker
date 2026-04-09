@@ -34,7 +34,7 @@ function normalize(val: number, min: number, max: number) {
 }
 
 export async function getRecommendation(state: DraftState, gameName?: string, tagLine?: string, region: string = 'euw') {
-  const picked = new Set([...state.allies, ...state.enemies]);
+  const picked = new Set([...state.allies, ...state.enemies, ...(state.bans || [])]);
 
   // 0. Prefetch OP.GG data via MCP
   const opggEnemyData = await Promise.all(
