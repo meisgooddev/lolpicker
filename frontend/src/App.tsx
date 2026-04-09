@@ -818,7 +818,7 @@ export default function App() {
                         <div className="plan-item"><span className="plan-warning">WARNING:</span> {gamePlan.lanePlan.levelOneToThree.warnings.join(' ')}</div>
                       )}
 
-                      <div className="plan-item"><span className="plan-label">Lvl 3-6:</span> {gamePlan.lanePlan?.levelThreeToSix?.waveManagement}. {gamePlan.lanePlan?.levelThreeToSix?.bestPlay}</div>
+                      <div className="plan-item"><span className="plan-label">Lvl 3-5:</span> {gamePlan.lanePlan?.levelThreeToFive?.waveManagement}. {gamePlan.lanePlan?.levelThreeToFive?.bestPlay}</div>
 
                       {gamePlan.lanePlan?.powerSpikes?.map((sp: any, i: number) => (
                         <div key={i} className="plan-item"><span className="plan-label">SPIKE: {sp.spike}</span> - {sp.whatToDo}</div>

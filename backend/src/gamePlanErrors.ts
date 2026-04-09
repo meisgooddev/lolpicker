@@ -56,7 +56,7 @@ export class GamePlanError extends Error {
 
 export const USER_MESSAGES: Record<GamePlanErrorCode, string> = {
   CONFIG_MISSING_API_KEY:
-    'The server is missing the Gemini API key configuration.',
+    'The server is missing the OpenAI API key configuration.',
   VALIDATION_MISSING_FIELDS:
     'The request sent by the app was incomplete or invalid.',
   NETWORK_TIMEOUT:
