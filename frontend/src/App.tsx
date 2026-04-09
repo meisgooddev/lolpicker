@@ -466,7 +466,21 @@ export default function App() {
             </div>
           </div>
 
-          <div className="vs-badge">VS</div>
+          <div className="center-battle-hud">
+            <div className="vs-badge">VS</div>
+            {bans.length > 0 && (
+              <div className="bans-zone">
+                <div className="bans-header"><X size={12} /> BANNED</div>
+                <div className="bans-list">
+                  {bans.map((bid, idx) => {
+                     const champ = championList.find(c => c.id === bid);
+                     if (!champ) return null;
+                     return <img key={idx} src={champ.image} alt={champ.name} title={champ.name} />;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="team-section">
             <h3 className="team-header red-txt"><Crosshair size={16} /> HOSTILE FORCES</h3>
