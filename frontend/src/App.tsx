@@ -212,35 +212,35 @@ export default function App() {
   // Determine if we are currently in-game (loading screen, active game, reconnect)
   const isInGame = ['InProgress', 'GameStart', 'WaitingForStats', 'Reconnect'].includes(gameflowPhase);
 
-  // When the game ends and player returns to lobby, clear the persisted game plan
+  // When a NEW champion select starts, clear everything from the previous game
   useEffect(() => {
-    if (['Lobby', 'None', 'EndOfGame'].includes(gameflowPhase) && (gamePlanStatus === 'ready' || gamePlanStatus === 'loading')) {
-      console.log(`[LOLPicker] Game ended (phase: ${gameflowPhase}). Clearing game plan.`);
+    if (gameflowPhase === 'ChampSelect') {
+      // Fresh champ select — reset all previous game data
+      console.log(`[LOLPicker] New ChampSelect detected. Clearing previous game data.`);
       setGamePlanStatus('idle');
       setGamePlan(null);
       setGamePlanError({});
       fetchingPlanRef.current = false;
+      setRecommendation(null);
+      setPlayerChampion(null);
     }
   }, [gameflowPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!lcuData || lcuData.httpStatus === 404 || typeof lcuData.localPlayerCellId !== 'number') {
-      // If currently in-game, do NOT clear: the champ select session disappeared because
-      // the game started, not because of a dodge. Preserve everything.
-      if (isInGame) return;
+      // If currently in-game or post-game, do NOT clear: preserve everything.
+      if (isInGame || ['WaitingForStats', 'EndOfGame', 'PreEndOfGame'].includes(gameflowPhase)) return;
+      // If we have an active game plan or recommendation, preserve them in lobby too
+      // They only clear when a new ChampSelect starts (handled above)
+      if (gamePlanStatus === 'ready' || gamePlanStatus === 'loading') return;
+      if (recommendation) return;
 
-      // Otherwise this is a dodge or lobby exit — full reset.
+      // Otherwise this is a cold state / dodge — reset draft slots.
       setRole(null);
       setAllies([null, null, null, null]);
       setEnemies([null, null, null, null, null]);
       setBans([]);
-      setRecommendation(null);
-      if (gamePlanStatus !== 'idle') {
-        setGamePlanStatus('idle');
-        setGamePlan(null);
-        setGamePlanError({});
-        fetchingPlanRef.current = false;
-      }
+      setPlayerChampion(null);
       return;
     }
     if (championList.length === 0) return;
@@ -800,143 +800,147 @@ export default function App() {
 
         {/* SELECTED CHAMPION ANALYSIS */}
         {isDraftComplete && playerChampion && (
-          <div className="panel" style={{ marginBottom: '0' }}>
+          <div className={`panel dossier active`}>
             <div className="panel-header"><Crosshair size={16} /> SELECTED CHAMPION ANALYSIS</div>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: '1rem 1.25rem' }}>
-              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
-                {/* Champion Avatar + Core Info */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px' }}>
-                  <div className="champ-avatar best" style={{ width: '80px', height: '80px', marginBottom: '0.5rem' }}>
-                    <img src={playerChampion.image} alt={playerChampion.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
-                  </div>
-                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.05em', textAlign: 'center', margin: 0 }}>
-                    {playerChampion.name.toUpperCase()}
-                  </h3>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{role?.toUpperCase()}</div>
-                  <div className="tags" style={{ marginTop: '0.35rem' }}>
-                    {playerChampion.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
-                  </div>
-                </div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="dossier-grid">
+              {(() => {
+                const inRec = recommendation?.best?.id === playerChampion.id ? recommendation.best
+                  : recommendation?.alternatives?.find((a: any) => a.id === playerChampion.id);
+                const isRecommended = !!inRec;
+                const champData = inRec || playerChampion;
 
-                {/* Matchup Analysis */}
-                <div style={{ flex: 1 }}>
-                  {(() => {
-                    // Check if the player's champion exists in the recommendation data
-                    const inRec = recommendation?.best?.id === playerChampion.id ? recommendation.best
-                      : recommendation?.alternatives?.find((a: any) => a.id === playerChampion.id);
-                    const isRecommended = !!inRec;
+                return (
+                  <>
+                    <div className="verdict-col">
+                      <div className="verdict-label">YOUR PICK</div>
+                      <div className="champ-avatar best">
+                        <img src={playerChampion.image} alt={playerChampion.name} />
+                        {champData.score != null && <div className="overall-score">{champData.score}</div>}
+                      </div>
+                      <h3 className="main-champ-name">{playerChampion.name.toUpperCase()}</h3>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>{role?.toUpperCase()}</div>
+                      <div className="tags">
+                        {playerChampion.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
+                      </div>
 
-                    return (
-                      <>
-                        {/* Recommendation status badge */}
-                        <div style={{
-                          display: 'inline-block',
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '4px',
-                          fontSize: '0.65rem',
-                          fontWeight: 700,
-                          letterSpacing: '0.08em',
-                          marginBottom: '0.75rem',
-                          background: isRecommended ? 'rgba(16, 185, 129, 0.15)' : 'rgba(251, 191, 36, 0.15)',
-                          color: isRecommended ? 'var(--score-good)' : 'var(--accent-amber)',
-                          border: `1px solid ${isRecommended ? 'rgba(16, 185, 129, 0.3)' : 'rgba(251, 191, 36, 0.3)'}`,
-                        }}>
-                          {isRecommended ? '✓ RECOMMENDED PICK' : '⚠ OFF-RECOMMENDATION PICK'}
+                      {/* Recommendation badge */}
+                      <div style={{
+                        marginTop: '0.75rem',
+                        display: 'inline-block',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '4px',
+                        fontSize: '0.6rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        background: isRecommended ? 'rgba(16, 185, 129, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                        color: isRecommended ? 'var(--score-good)' : 'var(--accent-amber)',
+                        border: `1px solid ${isRecommended ? 'rgba(16, 185, 129, 0.3)' : 'rgba(251, 191, 36, 0.3)'}`,
+                      }}>
+                        {isRecommended ? '✓ RECOMMENDED' : '⚠ OFF-META'}
+                      </div>
+
+                      {/* Win Rate Gauge */}
+                      {champData.draftAdvantage && (
+                        <div className="wr-gauge">
+                          <div className="wr-gauge-track">
+                            <div className="wr-zone unfav"></div>
+                            <div className="wr-zone neut"></div>
+                            <div className="wr-zone fav"></div>
+                            <motion.div
+                              className="wr-needle"
+                              initial={{ left: '50%' }}
+                              animate={{ left: `${Math.max(5, Math.min(95, ((champData.estimatedWR - 35) / 30) * 100))}%` }}
+                              transition={{ duration: 0.6, ease: 'easeOut' }}
+                            />
+                          </div>
+                          <div className="wr-label" style={{ color: getAdvantageColor(champData.draftAdvantage) }}>
+                            {getAdvantageLabel(champData.draftAdvantage)}
+                            <span className="wr-pct">{champData.estimatedWR}%</span>
+                          </div>
                         </div>
+                      )}
 
-                        {/* Matchup & WR if data available */}
-                        {inRec ? (
-                          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                            {/* Draft Advantage */}
-                            {inRec.draftAdvantage && (
-                              <div style={{ flex: '1', minWidth: '140px' }}>
-                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>DRAFT ADVANTAGE</div>
-                                <div className="wr-gauge" style={{ margin: 0 }}>
-                                  <div className="wr-gauge-track">
-                                    <div className="wr-zone unfav"></div>
-                                    <div className="wr-zone neut"></div>
-                                    <div className="wr-zone fav"></div>
-                                    <motion.div
-                                      className="wr-needle"
-                                      initial={{ left: '50%' }}
-                                      animate={{ left: `${Math.max(5, Math.min(95, ((inRec.estimatedWR - 35) / 30) * 100))}%` }}
-                                      transition={{ duration: 0.6, ease: 'easeOut' }}
-                                    />
-                                  </div>
-                                  <div className="wr-label" style={{ color: getAdvantageColor(inRec.draftAdvantage) }}>
-                                    {getAdvantageLabel(inRec.draftAdvantage)}
-                                    <span className="wr-pct">{inRec.estimatedWR}%</span>
-                                  </div>
+                      {/* Lane Matchup Indicator */}
+                      {champData.laneDifficulty && champData.laneDifficulty !== 'Unknown' && (
+                        <div className="lane-matchup">
+                          <div className="lane-matchup-label">LANE MATCHUP</div>
+                          <div className="lane-matchup-status">
+                            <div className={`status-dot fav ${champData.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
+                            <div className={`status-dot even ${champData.laneDifficulty === 'Even' ? 'active' : ''}`} />
+                            <div className={`status-dot diff ${champData.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
+                            <span className={`status-text ${champData.laneDifficulty.toLowerCase()}`}>
+                              {champData.laneDifficulty.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reasons */}
+                      {champData.reasons?.length > 0 && (
+                        <div className="reasons-list">
+                          {champData.reasons.slice(0, 3).map((r: string, i: number) => (
+                            <motion.div
+                              key={r}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.1 * i }}
+                              className="reason-item"
+                            >
+                              <TrendingUp size={10} />
+                              <span>{r}</span>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="evidence-col">
+                      <div className="evidence-label">ANALYTICS BREAKDOWN — {playerChampion.name.toUpperCase()}</div>
+                      {champData.scores ? (
+                        SCORE_DIMENSIONS.map(({ key, label, desc }) => {
+                          const score = champData.scores[key] || 0;
+                          const barWidth = Math.max(0, Math.min(100, score));
+                          return (
+                            <div className="data-row" key={key}>
+                              <div className="data-label">
+                                {label}
+                                <div className="info-icon">
+                                  ⓘ
+                                  <div className="info-tooltip">{desc}</div>
                                 </div>
                               </div>
-                            )}
-
-                            {/* Lane Matchup */}
-                            {inRec.laneDifficulty && inRec.laneDifficulty !== 'Unknown' && (
-                              <div style={{ flex: '1', minWidth: '120px' }}>
-                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>LANE MATCHUP</div>
-                                <div className="lane-matchup" style={{ marginTop: 0 }}>
-                                  <div className="lane-matchup-status">
-                                    <div className={`status-dot fav ${inRec.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
-                                    <div className={`status-dot even ${inRec.laneDifficulty === 'Even' ? 'active' : ''}`} />
-                                    <div className={`status-dot diff ${inRec.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
-                                    <span className={`status-text ${inRec.laneDifficulty.toLowerCase()}`}>
-                                      {inRec.laneDifficulty.toUpperCase()}
-                                    </span>
-                                  </div>
-                                </div>
+                              <div className="data-bar-bg">
+                                <motion.div
+                                  key={`selected-${playerChampion.id}-${key}`}
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${barWidth}%` }}
+                                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                                  className="data-bar-fill"
+                                  style={{ backgroundColor: getScoreColor(barWidth) }}
+                                />
                               </div>
-                            )}
-
-                            {/* Overall Score */}
-                            {inRec.score != null && (
-                              <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>OVERALL SCORE</div>
-                                <div style={{
-                                  fontSize: '1.6rem', fontWeight: 800,
-                                  color: getScoreColor(inRec.score),
-                                  lineHeight: 1,
-                                }}>{inRec.score}</div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                            This champion was not in the recommendation pool for the current draft.
-                            The AI Game Plan will still provide full coaching for this pick.
-                          </div>
-                        )}
-
-                        {/* Reasons from recommendation engine */}
-                        {inRec?.reasons?.length > 0 && (
-                          <div className="reasons-list" style={{ marginTop: '0.75rem' }}>
-                            {inRec.reasons.slice(0, 3).map((r: string, i: number) => (
-                              <motion.div
-                                key={r}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: 0.1 * i }}
-                                className="reason-item"
-                              >
-                                <TrendingUp size={10} />
-                                <span>{r}</span>
-                              </motion.div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
+                              <div className="data-value">{score}</div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, padding: '1rem 0' }}>
+                          This champion was not in the recommendation pool for the current draft.
+                          Detailed analytics are unavailable, but the AI Game Plan will still provide full coaching.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </motion.div>
           </div>
         )}
 
         {/* MANUAL GAME PLAN TRIGGER */}
         {isDraftComplete && gamePlanStatus === 'idle' && (
-          <div className="panel" style={{ textAlign: 'center', padding: '1.5rem' }}>
-            <div style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.1em', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+          <div className="panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem' }}>
+            <div style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.1em', marginBottom: '1rem', textTransform: 'uppercase' }}>
               ✓ Full draft detected
             </div>
             <button
@@ -945,7 +949,7 @@ export default function App() {
                 background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))',
                 color: '#fff',
                 border: 'none',
-                padding: '0.75rem 2rem',
+                padding: '0.75rem 2.5rem',
                 borderRadius: '6px',
                 fontWeight: 700,
                 fontSize: '0.9rem',
