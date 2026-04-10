@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Search, Shield, Crosshair, Radar, Terminal, Cpu, TrendingUp } from 'lucide-react'
+import { X, Search, Shield, Crosshair, Terminal, Cpu, TrendingUp } from 'lucide-react'
 import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -146,6 +146,7 @@ export default function App() {
   const [gamePlanStatus, setGamePlanStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [gamePlanError, setGamePlanError] = useState<{ code?: string; userMessage?: string; retryable?: boolean; requestId?: string }>({});
   const fetchingPlanRef = useRef(false);
+  const [playerChampion, setPlayerChampion] = useState<ChampInfo | null>(null);
 
   // Summoner identity for player affinity
   const [gameName, setGameName] = useState('');
@@ -367,61 +368,14 @@ export default function App() {
     setAllies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newAllies.map(c => c?.id)) ? prev : newAllies);
     setEnemies(prev => JSON.stringify(prev.map(c => c?.id)) === JSON.stringify(newEnemies.map(c => c?.id)) ? prev : newEnemies);
 
-    // Lock-in detection
-    const flatActions = lcuData.actions ? lcuData.actions.flat() : [];
-    const myPickAction = flatActions.find((a: any) => a.actorCellId === lcuData.localPlayerCellId && a.type === 'pick');
-    const isPlayerLockedIn = myPickAction ? myPickAction.completed : (localPlayer && localPlayer.championId > 0 && lcuData.timer.phase !== 'PLANNING');
-
-    if (!isPlayerLockedIn && gamePlanStatus !== 'idle') {
-      setGamePlanStatus('idle');
-      setGamePlan(null);
-      setGamePlanError({});
-      fetchingPlanRef.current = false;
-    }
-
-    if (isPlayerLockedIn && localPlayer && localPlayer.championId > 0 && gamePlanStatus === 'idle' && !fetchingPlanRef.current) {
-      fetchingPlanRef.current = true;
-      setGamePlanStatus('loading');
-
+    // Track the player's own champion from LCU
+    if (localPlayer && localPlayer.championId > 0) {
       const playerChamp = championList.find(c => c.key === localPlayer.championId);
       if (playerChamp) {
-        const payload = {
-          playerChampion: playerChamp.name,
-          playerRole: currentRole, // Always use the mapped role, not the raw LCU string
-          allies: newAllies.filter(Boolean).map(c => ({ name: c!.name, role: remainingAllyRoles[newAllies.indexOf(c)] })),
-          enemies: newEnemies.filter(Boolean).map(c => ({ name: c!.name, role: ALL_ROLES[newEnemies.indexOf(c)] })),
-          alliedBans: lcuBans.filter((_, i) => i < 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean),
-          enemyBans: lcuBans.filter((_, i) => i >= 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean)
-        };
-
-        axios.post(`${API_URL}/api/gameplan`, payload)
-          .then(res => {
-            if (res.data?.ok) {
-              setGamePlan(res.data.data);
-              setGamePlanStatus('ready');
-            } else {
-              console.error('Game Plan: backend returned ok=false', res.data?.error);
-              setGamePlanStatus('error');
-              setGamePlanError(res.data?.error || { userMessage: 'An unexpected error occurred.' });
-            }
-          })
-          .catch(err => {
-            console.error('Game Plan Error', err);
-            const backendError = err.response?.data?.error;
-            if (backendError && typeof backendError === 'object') {
-              setGamePlanError(backendError);
-            } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-              setGamePlanError({ code: 'NETWORK_TIMEOUT', userMessage: 'The request to the AI service took too long and timed out.', retryable: true });
-            } else if (!err.response) {
-              setGamePlanError({ code: 'NETWORK_UNREACHABLE', userMessage: 'Could not reach the backend server.', retryable: true });
-            } else {
-              setGamePlanError({ code: 'INTERNAL_UNKNOWN', userMessage: err.message || 'An unexpected error occurred.' });
-            }
-            setGamePlanStatus('error');
-          });
-      } else {
-        setGamePlanStatus('error');
+        setPlayerChampion(prev => prev?.id === playerChamp.id ? prev : playerChamp);
       }
+    } else {
+      setPlayerChampion(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lcuData, championList]);
@@ -463,6 +417,55 @@ export default function App() {
       newEnemies[index] = null;
       setEnemies(newEnemies);
     }
+  };
+
+  // Draft completeness check: all 4 allies + all 5 enemies + player champion must be filled
+  const isDraftComplete = playerChampion !== null && allies.every(a => a !== null) && enemies.every(e => e !== null);
+
+  const handleGenerateGamePlan = () => {
+    if (!isDraftComplete || !role || !playerChampion || fetchingPlanRef.current) return;
+    fetchingPlanRef.current = true;
+    setGamePlanStatus('loading');
+    setGamePlanError({});
+
+    const remainingAllyRoles = ALL_ROLES.filter(r => r !== role);
+    const payload = {
+      playerChampion: playerChampion.name,
+      playerRole: role,
+      allies: allies.filter(Boolean).map((c, i) => ({ name: c!.name, role: remainingAllyRoles[i] })),
+      enemies: enemies.filter(Boolean).map((c, i) => ({ name: c!.name, role: ALL_ROLES[i] })),
+      alliedBans: bans.filter((_, i) => i < 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean),
+      enemyBans: bans.filter((_, i) => i >= 5).map(id => championList.find(c => c.id === id)?.name).filter(Boolean),
+    };
+
+    axios.post(`${API_URL}/api/gameplan`, payload)
+      .then(res => {
+        if (res.data?.ok) {
+          setGamePlan(res.data.data);
+          setGamePlanStatus('ready');
+        } else {
+          console.error('Game Plan: backend returned ok=false', res.data?.error);
+          setGamePlanStatus('error');
+          setGamePlanError(res.data?.error || { userMessage: 'An unexpected error occurred.' });
+        }
+      })
+      .catch(err => {
+        console.error('Game Plan Error', err);
+        const backendError = err.response?.data?.error;
+        if (backendError && typeof backendError === 'object') {
+          setGamePlanError(backendError);
+        } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+          setGamePlanError({ code: 'NETWORK_TIMEOUT', userMessage: 'The request to the AI service took too long and timed out.', retryable: true });
+        } else if (!err.response) {
+          setGamePlanError({ code: 'NETWORK_UNREACHABLE', userMessage: 'Could not reach the backend server.', retryable: true });
+        } else {
+          setGamePlanError({ code: 'INTERNAL_UNKNOWN', userMessage: err.message || 'An unexpected error occurred.' });
+        }
+        setGamePlanStatus('error');
+      })
+      .finally(() => {
+        fetchingPlanRef.current = false;
+      });
   };
 
   const fetchRecommendation = async () => {
@@ -794,6 +797,171 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {/* SELECTED CHAMPION ANALYSIS */}
+        {isDraftComplete && playerChampion && (
+          <div className="panel" style={{ marginBottom: '0' }}>
+            <div className="panel-header"><Crosshair size={16} /> SELECTED CHAMPION ANALYSIS</div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: '1rem 1.25rem' }}>
+              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+                {/* Champion Avatar + Core Info */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px' }}>
+                  <div className="champ-avatar best" style={{ width: '80px', height: '80px', marginBottom: '0.5rem' }}>
+                    <img src={playerChampion.image} alt={playerChampion.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                  </div>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.05em', textAlign: 'center', margin: 0 }}>
+                    {playerChampion.name.toUpperCase()}
+                  </h3>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{role?.toUpperCase()}</div>
+                  <div className="tags" style={{ marginTop: '0.35rem' }}>
+                    {playerChampion.tags?.slice(0, 2).map((t: string) => <span key={t} className="tag">{t}</span>)}
+                  </div>
+                </div>
+
+                {/* Matchup Analysis */}
+                <div style={{ flex: 1 }}>
+                  {(() => {
+                    // Check if the player's champion exists in the recommendation data
+                    const inRec = recommendation?.best?.id === playerChampion.id ? recommendation.best
+                      : recommendation?.alternatives?.find((a: any) => a.id === playerChampion.id);
+                    const isRecommended = !!inRec;
+
+                    return (
+                      <>
+                        {/* Recommendation status badge */}
+                        <div style={{
+                          display: 'inline-block',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '4px',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          marginBottom: '0.75rem',
+                          background: isRecommended ? 'rgba(16, 185, 129, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                          color: isRecommended ? 'var(--score-good)' : 'var(--accent-amber)',
+                          border: `1px solid ${isRecommended ? 'rgba(16, 185, 129, 0.3)' : 'rgba(251, 191, 36, 0.3)'}`,
+                        }}>
+                          {isRecommended ? '✓ RECOMMENDED PICK' : '⚠ OFF-RECOMMENDATION PICK'}
+                        </div>
+
+                        {/* Matchup & WR if data available */}
+                        {inRec ? (
+                          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                            {/* Draft Advantage */}
+                            {inRec.draftAdvantage && (
+                              <div style={{ flex: '1', minWidth: '140px' }}>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>DRAFT ADVANTAGE</div>
+                                <div className="wr-gauge" style={{ margin: 0 }}>
+                                  <div className="wr-gauge-track">
+                                    <div className="wr-zone unfav"></div>
+                                    <div className="wr-zone neut"></div>
+                                    <div className="wr-zone fav"></div>
+                                    <motion.div
+                                      className="wr-needle"
+                                      initial={{ left: '50%' }}
+                                      animate={{ left: `${Math.max(5, Math.min(95, ((inRec.estimatedWR - 35) / 30) * 100))}%` }}
+                                      transition={{ duration: 0.6, ease: 'easeOut' }}
+                                    />
+                                  </div>
+                                  <div className="wr-label" style={{ color: getAdvantageColor(inRec.draftAdvantage) }}>
+                                    {getAdvantageLabel(inRec.draftAdvantage)}
+                                    <span className="wr-pct">{inRec.estimatedWR}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Lane Matchup */}
+                            {inRec.laneDifficulty && inRec.laneDifficulty !== 'Unknown' && (
+                              <div style={{ flex: '1', minWidth: '120px' }}>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>LANE MATCHUP</div>
+                                <div className="lane-matchup" style={{ marginTop: 0 }}>
+                                  <div className="lane-matchup-status">
+                                    <div className={`status-dot fav ${inRec.laneDifficulty === 'Favourable' ? 'active' : ''}`} />
+                                    <div className={`status-dot even ${inRec.laneDifficulty === 'Even' ? 'active' : ''}`} />
+                                    <div className={`status-dot diff ${inRec.laneDifficulty === 'Difficult' ? 'active' : ''}`} />
+                                    <span className={`status-text ${inRec.laneDifficulty.toLowerCase()}`}>
+                                      {inRec.laneDifficulty.toUpperCase()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Overall Score */}
+                            {inRec.score != null && (
+                              <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>OVERALL SCORE</div>
+                                <div style={{
+                                  fontSize: '1.6rem', fontWeight: 800,
+                                  color: getScoreColor(inRec.score),
+                                  lineHeight: 1,
+                                }}>{inRec.score}</div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                            This champion was not in the recommendation pool for the current draft.
+                            The AI Game Plan will still provide full coaching for this pick.
+                          </div>
+                        )}
+
+                        {/* Reasons from recommendation engine */}
+                        {inRec?.reasons?.length > 0 && (
+                          <div className="reasons-list" style={{ marginTop: '0.75rem' }}>
+                            {inRec.reasons.slice(0, 3).map((r: string, i: number) => (
+                              <motion.div
+                                key={r}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.1 * i }}
+                                className="reason-item"
+                              >
+                                <TrendingUp size={10} />
+                                <span>{r}</span>
+                              </motion.div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MANUAL GAME PLAN TRIGGER */}
+        {isDraftComplete && gamePlanStatus === 'idle' && (
+          <div className="panel" style={{ textAlign: 'center', padding: '1.5rem' }}>
+            <div style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.1em', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+              ✓ Full draft detected
+            </div>
+            <button
+              onClick={handleGenerateGamePlan}
+              style={{
+                background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))',
+                color: '#fff',
+                border: 'none',
+                padding: '0.75rem 2rem',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 15px rgba(0, 255, 255, 0.15)',
+              }}
+              onMouseEnter={e => { (e.target as HTMLElement).style.transform = 'translateY(-1px)'; (e.target as HTMLElement).style.boxShadow = '0 6px 20px rgba(0, 255, 255, 0.3)'; }}
+              onMouseLeave={e => { (e.target as HTMLElement).style.transform = 'translateY(0)'; (e.target as HTMLElement).style.boxShadow = '0 4px 15px rgba(0, 255, 255, 0.15)'; }}
+            >
+              Generate Game Plan
+            </button>
+          </div>
+        )}
 
         {/* PRE-GAME STRATEGIC BRIEF */}
         {(gamePlanStatus !== 'idle') && (
